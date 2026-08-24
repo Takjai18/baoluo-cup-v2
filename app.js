@@ -4222,6 +4222,8 @@ let padPickSide = null; // "p1" | "p2" | "draw"
 let padBeyP1 = 0;
 let padBeyP2 = 0;
 let padBusy = false;
+/** 拍片後暫存在記憶體，等裁判撳「儲存到相簿」；唔寫入網站／雲端 */
+let padPendingClip = null;
 /** 計分板 refresh 後要等雲端套用完，先可以反寫，以免本機舊場污染新房 */
 let cloudHydrated = true;
 
@@ -4367,6 +4369,10 @@ function openScorePad() {
 }
 
 function closeScorePad() {
+  if (padPendingClip && !padPendingClip.saved) {
+    if (!confirm("有一段片未儲存到相簿。離開會丟咗（網站唔會存）。仍要離開？")) return;
+    padClearPendingClip();
+  }
   padOpenKey = null;
   padPickSide = null;
   const el = document.getElementById("scorePad");
@@ -4405,6 +4411,9 @@ function padVideoFileName() {
 }
 
 function padStartCapture() {
+  if (padPendingClip && !padPendingClip.saved) {
+    if (!confirm("上一段片未儲存到相簿。再拍會取代它。繼續？")) return;
+  }
   const input = document.getElementById("padVideoCapture");
   if (!input) {
     toast("呢部裝置開唔到鏡頭", "error");
@@ -4414,46 +4423,90 @@ function padStartCapture() {
   input.click();
 }
 
-function padDownloadLocal(file, name) {
-  const url = URL.createObjectURL(file);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name || file.name || "baoluo.mp4";
-  a.rel = "noopener";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 4000);
-  toast("已交俾你部手機儲存。網站同雲端都冇存片。", "success");
+function padClearPendingClip() {
+  if (padPendingClip?.url) {
+    try {
+      URL.revokeObjectURL(padPendingClip.url);
+    } catch (_) {}
+  }
+  padPendingClip = null;
 }
 
-async function padOnVideoCaptured(ev) {
-  const input = ev.target;
-  const src = input.files && input.files[0];
-  input.value = "";
-  if (!src) return;
-  const name = padVideoFileName();
-  const file =
-    src.name && src.name !== "blob"
-      ? src
-      : new File([src], name, { type: src.type || "video/mp4" });
+function padAsPhoneFile(src, name) {
+  const type = src.type || "video/mp4";
+  const ext = /quicktime|x-m4v/i.test(type) ? ".mov" : ".mp4";
+  const fname = String(name || "baoluo").replace(/\.(mp4|mov)$/i, "") + ext;
+  return src instanceof File && src.name
+    ? src
+    : new File([src], fname, { type: type.includes("video") ? type : "video/mp4" });
+}
+
+function padClipBannerHtml() {
+  if (!padPendingClip) return "";
+  const saved = !!padPendingClip.saved;
+  return `
+    <div class="sp-clip ${saved ? "is-saved" : "is-pending"}">
+      <video class="sp-clip-vid" src="${padPendingClip.url}" playsinline webkit-playsinline controls></video>
+      <div class="sp-clip-copy">${
+        saved
+          ? "已交俾手機處理。請到「相簿 → 最近項目」確認。"
+          : "片未入相簿。撳「儲存到相簿」，喺分享表揀「儲存影片」。長按預覽亦可儲存。"
+      }</div>
+      <div class="sp-clip-btns">
+        ${
+          saved
+            ? `<button type="button" class="sp-clip-save" data-sp="vid-drop">完成</button>`
+            : `<button type="button" class="sp-clip-save" data-sp="vid-save">儲存到相簿</button>
+               <button type="button" class="sp-clip-drop" data-sp="vid-drop">捨棄</button>`
+        }
+      </div>
+    </div>`;
+}
+
+async function padSavePendingClip() {
+  const clip = padPendingClip;
+  if (!clip?.file) {
+    toast("冇片可以儲存", "error");
+    return;
+  }
+  const file = padAsPhoneFile(clip.file, clip.name);
   try {
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({
         files: [file],
-        title: name,
-        text: "寶螺盃比賽紀錄 · 請揀「儲存影片」到相簿。唔好傳到雲端。",
+        title: clip.name,
+        text: "請揀「儲存影片」→ 相簿。呢段片唔會上傳網站。",
       });
-      toast("影片只喺你部手機。網站同雲端都冇存。", "success");
+      clip.saved = true;
+      toast("請確認相簿「最近項目」有呢段片。網站冇存。", "success");
+      renderScorePad();
       return;
     }
   } catch (err) {
     if (err && err.name === "AbortError") {
-      padDownloadLocal(file, name);
+      toast("未儲存。請再撳「儲存到相簿」，分享表揀「儲存影片」。", "error");
       return;
     }
   }
-  padDownloadLocal(file, name);
+  toast("請長按上面預覽 →「儲存影片」到相簿。", "error");
+}
+
+function padOnVideoCaptured(ev) {
+  const input = ev.target;
+  const src = input.files && input.files[0];
+  input.value = "";
+  if (!src) return;
+  padClearPendingClip();
+  const name = padVideoFileName();
+  const file = padAsPhoneFile(src, name);
+  padPendingClip = {
+    file,
+    name,
+    url: URL.createObjectURL(file),
+    saved: false,
+  };
+  toast("拍好。請撳「儲存到相簿」，否則 iPhone 搵唔返。", "success");
+  renderScorePad();
 }
 
 /** 頭 3 盤已用過嘅陀螺 index；第 4 盤起唔再限制。 */
@@ -4640,6 +4693,7 @@ function renderScorePad() {
       <button type="button" class="sp-icon sp-rec" data-sp="rec" title="用手機拍片，只存你部機">拍片</button>
       <button type="button" class="sp-icon" data-sp="desk" title="返大會畫面">大會</button>
     </div>
+    ${padClipBannerHtml()}
     <div class="sp-scoreline">${openN} 場進行中</div>
     <div class="sp-zones">
       <button type="button" class="sp-chip ${filter === "all" ? "on" : ""}" data-sp="zone" data-z="all">全部</button>
@@ -4706,12 +4760,14 @@ function renderScorePadMatch(top, body, entry, meta) {
       <button type="button" class="sp-icon sp-rec" data-sp="rec" title="用手機拍片，只存你部機">拍片</button>
       <button type="button" class="sp-icon" data-sp="desk">大會</button>
     </div>
+    ${padClipBannerHtml()}
   `;
   const last = (m.battles || [])[(m.battles || []).length - 1];
   const lastTxt = last
     ? `上一盤：${last.finishType === "draw" ? "平手 0" : `${playerById(last.winnerId)?.name || "?"} +${last.points || finishPts(last.finishType)}`}（${beyShortAt(p1, last.p1BeyIndex)} vs ${beyShortAt(p2, last.p2BeyIndex)}）`
     : "未有 Battle";
   body.innerHTML = `
+    <div class="sp-match-screen">
     <div class="sp-scoreboard">
       <button type="button" class="sp-player ${padPickSide === "p1" ? "pick" : ""} ${t.winnerId === m.p1 ? "win" : ""}" data-sp="pick" data-side="p1" ${!can || t.done ? "disabled" : ""}>
         <span class="sp-pname">${escapeHtml(p1?.name || "選手1")}</span>
@@ -4739,6 +4795,7 @@ function renderScorePadMatch(top, body, entry, meta) {
             ? "再撳完場方式"
             : "撳邊個贏咗呢一盤，再撳 Extreme／Over／Burst／Spin"
     }</div>
+    <div class="sp-mid">
     ${
       t.done
         ? `<button type="button" class="sp-next" data-sp="back">下一場</button>`
@@ -4753,9 +4810,11 @@ function renderScorePadMatch(top, body, entry, meta) {
       </div>`
           : `<div class="sp-warn">${entry.round?.locked ? "本輪已鎖定" : "無法入分"}</div>`
     }
+    </div>
     <div class="sp-tools">
       <div class="sp-last">${escapeHtml(lastTxt)} · ${m.battles?.length || 0} 盤</div>
       <button type="button" class="sp-undo" data-sp="undo" ${!can || !m.battles?.length ? "disabled" : ""}>還原上一盤</button>
+    </div>
     </div>
   `;
 }
@@ -4764,6 +4823,15 @@ function onScorePadClick(e) {
   const btn = e.target.closest("[data-sp]");
   if (!btn || padBusy) return;
   const act = btn.dataset.sp;
+  if (act === "vid-save") {
+    padSavePendingClip();
+    return;
+  }
+  if (act === "vid-drop") {
+    padClearPendingClip();
+    renderScorePad();
+    return;
+  }
   if (act === "rec") {
     padStartCapture();
     return;

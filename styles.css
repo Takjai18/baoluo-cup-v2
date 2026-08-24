@@ -3858,3 +3858,139 @@ body.is-score-pad #app {
   .sp-fin-draw { grid-column: auto; }
   .sp-pname { font-size: 1.6rem; }
 }
+
+.sp-clip {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 8px 0;
+  padding: 8px;
+  border-radius: 12px;
+  background: #1a0c00;
+  border: 1px solid #ff7a3b;
+}
+.sp-clip.is-saved {
+  background: #102010;
+  border-color: #34d399;
+}
+.sp-clip-vid {
+  width: 112px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #000;
+  flex: 0 0 auto;
+}
+.sp-clip-copy {
+  flex: 1;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #ffd0b8;
+}
+.sp-clip.is-saved .sp-clip-copy { color: #bbf7d0; }
+.sp-clip-btns { display: flex; flex-direction: column; gap: 6px; }
+.sp-clip-save, .sp-clip-drop {
+  min-height: 40px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-weight: 800;
+  border: 0;
+}
+.sp-clip-save { background: var(--accent); color: #111; }
+.sp-clip-drop { background: #333; color: #fff; }
+
+/* 打橫：入分一屏內完成，唔使向下掃 */
+@media (orientation: landscape) and (max-height: 560px) {
+  .score-pad {
+    padding: max(4px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  }
+  .sp-body {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding-top: 4px;
+  }
+  .sp-bar { gap: 4px; }
+  .sp-icon { min-height: 34px; padding: 4px 8px; font-size: 0.78rem; }
+  .sp-bar-id { font-size: 0.78rem; }
+  .sp-scoreline { margin: 2px 0 4px; font-size: 0.95rem; }
+  .sp-chip { min-height: 30px; padding: 3px 10px; font-size: 0.8rem; }
+  .sp-list { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .sp-match { min-height: 52px; padding: 8px 10px; }
+  .sp-match-meta { margin-bottom: 2px; font-size: 0.7rem; }
+  .sp-match-row { font-size: 1rem; }
+  .sp-clip { margin: 4px 0; padding: 6px; }
+  .sp-clip-vid { width: 80px; height: 48px; }
+  .sp-clip-copy { font-size: 0.7rem; }
+  .sp-clip-save, .sp-clip-drop { min-height: 32px; }
+  .sp-match-screen {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(132px, 0.9fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "p1 mid p2"
+      "b1 hint b2"
+      "tools tools tools";
+    gap: 6px;
+    align-items: stretch;
+  }
+  .sp-scoreboard { display: contents; }
+  .sp-scoreboard .sp-player:first-child { grid-area: p1; min-height: 0; }
+  .sp-colon { display: none; }
+  .sp-scoreboard .sp-player:last-child { grid-area: p2; min-height: 0; }
+  .sp-bey-row { display: contents; }
+  .sp-bey-row .sp-beys:first-child {
+    grid-area: b1;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 4px;
+  }
+  .sp-bey-mid { display: none; }
+  .sp-bey-row .sp-beys:last-child {
+    grid-area: b2;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 4px;
+  }
+  .sp-hint {
+    grid-area: hint;
+    min-height: 0;
+    margin: 0;
+    font-size: 0.72rem;
+    align-self: center;
+  }
+  .sp-mid {
+    grid-area: mid;
+    display: flex;
+    min-height: 0;
+  }
+  .sp-mid .sp-finishes,
+  .sp-mid .sp-next,
+  .sp-mid .sp-warn {
+    flex: 1;
+  }
+  .sp-finishes { grid-template-columns: 1fr 1fr; gap: 5px; }
+  .sp-fin { min-height: 0; padding: 4px; }
+  .sp-fin b { font-size: 1.25rem; }
+  .sp-fin span { font-size: 0.7rem; }
+  .sp-next { min-height: 0; font-size: 1.05rem; }
+  .sp-tools { grid-area: tools; margin: 0; }
+  .sp-player { padding: 6px 4px; gap: 2px; }
+  .sp-ppts { font-size: 2rem; }
+  .sp-pname { font-size: 0.95rem; }
+  .sp-bey {
+    min-height: 34px;
+    padding: 3px 4px;
+    flex-direction: column;
+    gap: 1px;
+    text-align: center;
+  }
+  .sp-bey-box { width: 14px; height: 14px; flex-basis: 14px; }
+  .sp-bey.on .sp-bey-box::after { left: 3px; top: 0; width: 4px; height: 8px; border-width: 0 2px 2px 0; }
+  .sp-bey-n { font-size: 0.7rem; }
+  .sp-bey-lab { font-size: 0.62rem; max-width: 100%; }
+  .sp-undo { min-height: 34px; padding: 4px 10px; font-size: 0.8rem; }
+  .sp-last { font-size: 0.72rem; }
+}
