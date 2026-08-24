@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="theme-color" content="#0a0a0a" />
   <title>寶螺盃 · 瑞士制管理系統</title>
@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@500;700;900&family=Oswald:wght@600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260824a" />
+  <link rel="stylesheet" href="styles.css?v=20260825a" />
 </head>
 <body>
   <!-- 官方風格螢光黃綠 Banner：教會 | 寶螺盃 | BX Logo -->
@@ -180,8 +180,8 @@
             <h2>☁ 雲端同步（多裝置）</h2>
           </div>
           <div class="hint">
-            用<strong>比賽 ID</strong>讓多部電腦睇同一場。多部計分機都可以輸入<strong>主持碼</strong>一齊改分（系統會合併賽果）；只填 ID、唔填主持碼＝只讀／投影。
-            未設定 Firebase 時呢度會提示，App 仍可本機單機用。
+            <strong>主電腦</strong>負責投影、選手、公佈賽果；<strong>手機／iPad</strong>用「計分板」大掣快速入分（唔使睇成場排名）。
+            加入時揀角色。計分同大會都要主持碼；只讀投影可留空。未設定 Firebase 時仍可本機單機用。
           </div>
           <div id="cloudSyncStatus" class="sync-status-box mt-16">未連線 · 本機模式</div>
           <div class="btn-row wrap mt-16">
@@ -189,6 +189,7 @@
             <button type="button" class="btn btn-ghost" id="btnCloudJoin">加入比賽</button>
             <button type="button" class="btn btn-ghost" id="btnCloudShowId" disabled>顯示比賽 ID</button>
             <button type="button" class="btn btn-ghost" id="btnCloudLeave" disabled>離開雲端</button>
+            <button type="button" class="btn btn-secondary" id="btnOpenScorePad">開啟計分板</button>
           </div>
         </div>
       </section>
@@ -512,6 +513,7 @@
             <button type="button" class="btn btn-ghost pair-mode-btn" id="btnViewStaff" data-pair-view="staff">⌨️ 計分操作</button>
             <button type="button" class="btn btn-ghost btn-sm staff-tools" id="btnRegenPairing">重新配對</button>
             <button type="button" class="btn btn-ghost btn-sm staff-tools" id="btnManualPair">手動調整</button>
+            <button type="button" class="btn btn-secondary btn-sm staff-tools" id="btnPairOpenPad">計分板</button>
             <button type="button" class="btn btn-primary btn-sm" id="btnLockRound" disabled>鎖定本輪</button>
           </div>
         </div>
@@ -790,13 +792,31 @@
           <button class="btn-icon" id="btnCloseCloudJoin" type="button">✕</button>
         </div>
         <div class="modal-body">
-          <label class="settings-field">
+          <p class="hint" style="margin-top:0">手機／iPad 揀「計分板」；主電腦揀「大會」。計分同大會要填主持碼。</p>
+          <div class="join-roles" id="joinRoleGroup" role="radiogroup" aria-label="呢部裝置嘅用途">
+            <label class="join-role">
+              <input type="radio" name="joinRole" value="score" checked />
+              <strong>計分手機／iPad</strong>
+              <span>大掣入分，唔睇排名</span>
+            </label>
+            <label class="join-role">
+              <input type="radio" name="joinRole" value="desk" />
+              <strong>大會主電腦</strong>
+              <span>投影、選手、公佈賽果</span>
+            </label>
+            <label class="join-role">
+              <input type="radio" name="joinRole" value="view" />
+              <strong>只讀／第二投影</strong>
+              <span>唔使主持碼</span>
+            </label>
+          </div>
+          <label class="settings-field mt-16">
             <span class="section-label">比賽 ID</span>
             <input type="text" id="cloudJoinId" class="input" autocomplete="off" placeholder="例如 A3K9P2" style="text-transform:uppercase;letter-spacing:0.12em;font-weight:800" />
           </label>
           <label class="settings-field mt-16">
-            <span class="section-label">主持碼（可留空＝只讀）</span>
-            <input type="password" id="cloudJoinPass" class="input" autocomplete="current-password" placeholder="只睇賽況可留空" />
+            <span class="section-label">主持碼</span>
+            <input type="password" id="cloudJoinPass" class="input" autocomplete="current-password" placeholder="只讀可留空" />
           </label>
           <div class="btn-row wrap mt-16">
             <button type="button" class="btn btn-primary" id="btnCloudJoinConfirm">加入</button>
@@ -814,7 +834,7 @@
         </div>
         <div class="modal-body" style="text-align:center">
           <div id="cloudIdBig" class="sync-id-big">————</div>
-          <p class="hint mt-16">其他裝置開啟本網站 → 加入比賽 → 輸入呢個 ID</p>
+          <p class="hint mt-16">手機／iPad 開同一網站 → 加入比賽 → 揀「計分板」→ 輸入 ID 同主持碼。主電腦留喺呢頁做投影。</p>
           <div class="btn-row wrap" style="justify-content:center">
             <button type="button" class="btn btn-primary" id="btnCloudCopyId">複製 ID</button>
           </div>
@@ -829,6 +849,12 @@
     </footer>
   </div>
 
+  <!-- 計分板：手機／iPad 全螢幕觸控入分（盲操作） -->
+  <div id="scorePad" class="score-pad hidden" aria-hidden="true">
+    <div class="sp-top" id="scorePadTop"></div>
+    <div class="sp-body" id="scorePadBody"></div>
+  </div>
+
   <div id="toast" class="toast hidden"></div>
   <!-- Firebase（未設定 config 時 sync 會安全停用） -->
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
@@ -838,6 +864,6 @@
   <!-- cache-bust：確保 GitHub Pages 載入最新 JS -->
   <script src="parts.js?v=20260824a"></script>
   <script src="cutoff.js?v=20260824a"></script>
-  <script src="app.js?v=20260824a"></script>
+  <script src="app.js?v=20260825a"></script>
 </body>
 </html>

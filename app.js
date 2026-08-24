@@ -4177,6 +4177,457 @@ function phaseLabel() {
   return state.phase;
 }
 
+// ─── 計分板（手機／iPad 盲操作）────────────────────────
+const DEVICE_ROLE_KEY = "baoluo-cup-next-device-role";
+const PAD_ZONE_KEY = "baoluo-cup-next-pad-zone";
+let padOpenKey = null;
+let padPickSide = null; // "p1" | "p2" | "draw"
+let padBusy = false;
+
+function getDeviceRole() {
+  try {
+    const r = sessionStorage.getItem(DEVICE_ROLE_KEY);
+    if (r === "score" || r === "desk" || r === "view") return r;
+  } catch (_) {}
+  return "desk";
+}
+
+function setDeviceRole(role) {
+  if (role !== "score" && role !== "desk" && role !== "view") role = "desk";
+  try {
+    sessionStorage.setItem(DEVICE_ROLE_KEY, role);
+  } catch (_) {}
+  applyDeviceChrome();
+}
+
+function isScorePadOpen() {
+  const el = document.getElementById("scorePad");
+  return !!(el && !el.classList.contains("hidden"));
+}
+
+function applyDeviceChrome() {
+  const score = getDeviceRole() === "score" || isScorePadOpen();
+  document.body.classList.toggle("is-score-pad", score && isScorePadOpen());
+}
+
+function getPadZoneFilter() {
+  try {
+    return sessionStorage.getItem(PAD_ZONE_KEY) || "all";
+  } catch (_) {
+    return "all";
+  }
+}
+
+function setPadZoneFilter(z) {
+  try {
+    sessionStorage.setItem(PAD_ZONE_KEY, String(z));
+  } catch (_) {}
+}
+
+function padMatchKey(entry) {
+  return entry.kind + ":" + entry.id;
+}
+
+function listPadMatches() {
+  const out = [];
+  const round = currentRoundObj();
+  if (round) {
+    for (const m of round.matches || []) {
+      if (isByeMatch(m)) continue;
+      out.push({
+        kind: "swiss",
+        id: m.id,
+        match: m,
+        round,
+        locked: !!round.locked,
+        zone: m.zone,
+        zoneCode: m.zoneCode || zoneCode(m.zone || 0),
+        label: `第${round.round}輪 · ${m.zoneLabel || zoneLabel(m.zone || 0)} · 場次 ${m.table}`,
+      });
+    }
+  }
+  (state.cutPlayoff?.matches || []).forEach((m, i) => {
+    if (!m || !m.p1 || !m.p2) return;
+    out.push({
+      kind: "playoff",
+      id: m.id,
+      match: m,
+      locked: false,
+      zone: m.zone,
+      zoneCode: "加賽",
+      label: m.label || `入圍加賽 ${i + 1}`,
+    });
+  });
+  if (state.knockout) {
+    (state.knockout.rounds || []).forEach((r, ri) => {
+      (r.matches || []).forEach((m, mi) => {
+        if (!m || !m.p1 || !m.p2) return;
+        out.push({
+          kind: "ko",
+          id: m.id,
+          match: m,
+          koRef: { type: "round", roundIndex: ri, matchIndex: mi },
+          locked: false,
+          zoneCode: "淘汰",
+          label: m.label || r.name || "淘汰賽",
+        });
+      });
+    });
+    [
+      ["third", "季軍賽"],
+      ["final", "決賽"],
+    ].forEach(([key, lab]) => {
+      const m = state.knockout[key];
+      if (!m || !m.p1 || !m.p2) return;
+      out.push({
+        kind: "ko",
+        id: m.id,
+        match: m,
+        koRef: { type: key },
+        locked: false,
+        zoneCode: "淘汰",
+        label: m.label || lab,
+      });
+    });
+  }
+  return out;
+}
+
+function findPadEntry(key) {
+  return listPadMatches().find((e) => padMatchKey(e) === key) || null;
+}
+
+function padZoneOptions() {
+  const matches = listPadMatches();
+  const zones = [];
+  const seen = new Set();
+  matches.forEach((e) => {
+    const z = e.zoneCode || "—";
+    if (seen.has(z)) return;
+    seen.add(z);
+    zones.push(z);
+  });
+  return zones;
+}
+
+function openScorePad() {
+  const el = document.getElementById("scorePad");
+  if (!el) return;
+  el.classList.remove("hidden");
+  el.setAttribute("aria-hidden", "false");
+  if (getDeviceRole() === "desk") {
+    /* keep desk role so returning to 大會畫面 works */
+  } else {
+    setDeviceRole("score");
+  }
+  applyDeviceChrome();
+  document.body.classList.add("is-score-pad");
+  renderScorePad();
+}
+
+function closeScorePad() {
+  padOpenKey = null;
+  padPickSide = null;
+  const el = document.getElementById("scorePad");
+  if (el) {
+    el.classList.add("hidden");
+    el.setAttribute("aria-hidden", "true");
+  }
+  if (getDeviceRole() === "score") setDeviceRole("desk");
+  document.body.classList.remove("is-score-pad");
+  applyDeviceChrome();
+  render();
+}
+
+function padVibrate() {
+  try {
+    navigator.vibrate?.(12);
+  } catch (_) {}
+}
+
+function padCanWrite(entry) {
+  if (window.BaoluoSync?.isReadOnly?.()) return false;
+  if (!entry) return false;
+  if (entry.kind === "swiss" && entry.round?.locked) return false;
+  const m = entry.match;
+  if (!m || isByeMatch(m) || m.lateForfeit) return false;
+  return true;
+}
+
+function padRecordBattle(entry, winnerId, finishType) {
+  if (!assertCanWrite()) return false;
+  if (!padCanWrite(entry)) {
+    toast(entry?.round?.locked ? "本輪已鎖定" : "呢場唔可以入分", "error");
+    return false;
+  }
+  const m = entry.match;
+  ensureMatchBeyOrders(m);
+  m.battles = normalizeBattles(m.battles || []);
+  if (m.done) {
+    toast("呢場已完場", "error");
+    return false;
+  }
+  const nextI = m.battles.length;
+  const ft = finishType === "draw" || !winnerId ? "draw" : finishType;
+  m.battles.push({
+    id: uid("b"),
+    p1BeyIndex: defaultBeyIndexForBattle(m.p1BeyOrder, nextI),
+    p2BeyIndex: defaultBeyIndexForBattle(m.p2BeyOrder, nextI),
+    winnerId: ft === "draw" ? null : winnerId,
+    finishType: ft,
+    points: finishPts(ft),
+  });
+  applyBattleTotals(m);
+  if (entry.kind === "playoff") {
+    if (m.done && !m.winner) {
+      m.done = false;
+      m.draw = false;
+      toast("入圍加賽必須分勝方，請繼續打", "error");
+    } else if (m.done) {
+      maybeAdvanceCutPlayoff();
+    }
+  }
+  if (entry.kind === "ko") {
+    if (m.done && m.winner) {
+      tryAdvanceKnockout();
+      if (state.knockout.final?.done && state.knockout.third?.done) state.phase = "done";
+      else state.phase = "knockout";
+    }
+  }
+  saveState();
+  padPickSide = null;
+  padVibrate();
+  render();
+  return true;
+}
+
+function padUndoBattle(entry) {
+  if (!assertCanWrite()) return;
+  if (!padCanWrite(entry) && !(entry?.match && !entry.round?.locked)) {
+    toast("唔可以還原", "error");
+    return;
+  }
+  if (entry.kind === "ko" && entry.match?.done && koMatchHasDownstream(entry.koRef || {})) {
+    toast("淘汰賽已晉級，請返主電腦改", "error");
+    return;
+  }
+  const m = entry.match;
+  if (!m.battles?.length) {
+    toast("未有 Battle 可還原", "error");
+    return;
+  }
+  m.battles.pop();
+  applyBattleTotals(m);
+  saveState();
+  padVibrate();
+  render();
+}
+
+function renderScorePad() {
+  const pad = document.getElementById("scorePad");
+  const top = document.getElementById("scorePadTop");
+  const body = document.getElementById("scorePadBody");
+  if (!pad || pad.classList.contains("hidden") || !top || !body) return;
+
+  const roomId = window.BaoluoSync?.getRoomId?.() || "";
+  const readonly = !!window.BaoluoSync?.isReadOnly?.();
+  const filter = getPadZoneFilter();
+  const all = listPadMatches();
+  const zones = padZoneOptions();
+  const list = all.filter((e) => {
+    if (filter === "all") return true;
+    if (filter === "open") return !e.match.done;
+    return String(e.zoneCode) === String(filter);
+  });
+  const openN = all.filter((e) => !e.match.done && !e.match.lateForfeit).length;
+
+  if (padOpenKey) {
+    const entry = findPadEntry(padOpenKey);
+    if (!entry) {
+      padOpenKey = null;
+      padPickSide = null;
+    } else {
+      renderScorePadMatch(top, body, entry, { roomId, readonly, openN });
+      return;
+    }
+  }
+
+  top.innerHTML = `
+    <div class="sp-bar">
+      <div class="sp-bar-id">${roomId ? escapeHtml(roomId) : "本機"} · 計分板</div>
+      <button type="button" class="sp-icon" data-sp="desk" title="返大會畫面">大會</button>
+    </div>
+    <div class="sp-scoreline">${openN} 場進行中</div>
+    <div class="sp-zones">
+      <button type="button" class="sp-chip ${filter === "all" ? "on" : ""}" data-sp="zone" data-z="all">全部</button>
+      <button type="button" class="sp-chip ${filter === "open" ? "on" : ""}" data-sp="zone" data-z="open">未完場</button>
+      ${zones
+        .map(
+          (z) =>
+            `<button type="button" class="sp-chip ${filter === String(z) ? "on" : ""}" data-sp="zone" data-z="${escapeAttr(String(z))}">${escapeHtml(/^[A-P]$/i.test(String(z)) ? z + "區" : String(z))}</button>`
+        )
+        .join("")}
+    </div>
+    ${readonly ? `<div class="sp-warn">只讀模式：入唔到分。加入時請填主持碼並揀「計分板」。</div>` : ""}
+  `;
+
+  if (!list.length) {
+    body.innerHTML = `<div class="sp-empty">而家冇場要入。<br>等主電腦產生對戰表／下一輪。</div>`;
+    return;
+  }
+
+  const live = list.filter((e) => !e.match.done);
+  const done = list.filter((e) => e.match.done);
+  const card = (e) => {
+    const p1 = playerById(e.match.p1);
+    const p2 = playerById(e.match.p2);
+    const t = totalsFromBattles(e.match.p1, e.match.p2, e.match.battles || []);
+    const p1s = e.match.done ? e.match.p1Bp : t.p1Bp;
+    const p2s = e.match.done ? e.match.p2Bp : t.p2Bp;
+    const auto = e.match.lateForfeit ? " · 遲到0–4" : "";
+    return `
+      <button type="button" class="sp-match ${e.match.done ? "is-done" : ""}" data-sp="open" data-key="${escapeAttr(padMatchKey(e))}">
+        <div class="sp-match-meta">${escapeHtml(e.zoneCode || "")} · ${escapeHtml(e.label)}${auto}</div>
+        <div class="sp-match-row">
+          <span class="sp-mn ${e.match.winner === e.match.p1 ? "win" : ""}">${escapeHtml(p1?.name || "?")}</span>
+          <span class="sp-ms">${p1s} : ${p2s}</span>
+          <span class="sp-mn ${e.match.winner === e.match.p2 ? "win" : ""}">${escapeHtml(p2?.name || "?")}</span>
+        </div>
+      </button>`;
+  };
+  body.innerHTML = `
+    <div class="sp-list">${live.map(card).join("")}</div>
+    ${done.length ? `<div class="sp-done-lab">已完場</div><div class="sp-list">${done.map(card).join("")}</div>` : ""}
+  `;
+}
+
+function renderScorePadMatch(top, body, entry, meta) {
+  const m = entry.match;
+  const p1 = playerById(m.p1);
+  const p2 = playerById(m.p2);
+  const t = totalsFromBattles(m.p1, m.p2, m.battles || []);
+  const can = padCanWrite(entry) && !meta.readonly;
+  const finishes = [
+    { id: "extreme", lab: "Extreme", pts: 3 },
+    { id: "over", lab: "Over", pts: 2 },
+    { id: "burst", lab: "Burst", pts: 2 },
+    { id: "spin", lab: "Spin", pts: 1 },
+  ];
+  top.innerHTML = `
+    <div class="sp-bar">
+      <button type="button" class="sp-icon" data-sp="back">← 場次</button>
+      <div class="sp-bar-id">${escapeHtml(entry.zoneCode || "")} · ${escapeHtml(entry.label)}</div>
+      <button type="button" class="sp-icon" data-sp="desk">大會</button>
+    </div>
+  `;
+  const last = (m.battles || [])[(m.battles || []).length - 1];
+  const lastTxt = last
+    ? `上一盤：${last.finishType === "draw" ? "平手 0" : `${playerById(last.winnerId)?.name || "?"} +${last.points || finishPts(last.finishType)}`}`
+    : "未有 Battle";
+  body.innerHTML = `
+    <div class="sp-scoreboard">
+      <button type="button" class="sp-player ${padPickSide === "p1" ? "pick" : ""} ${t.winnerId === m.p1 ? "win" : ""}" data-sp="pick" data-side="p1" ${!can || t.done ? "disabled" : ""}>
+        <span class="sp-pname">${escapeHtml(p1?.name || "選手1")}</span>
+        <span class="sp-ppts">${t.p1Bp}</span>
+      </button>
+      <div class="sp-colon">先到 ${MATCH_TARGET}</div>
+      <button type="button" class="sp-player ${padPickSide === "p2" ? "pick" : ""} ${t.winnerId === m.p2 ? "win" : ""}" data-sp="pick" data-side="p2" ${!can || t.done ? "disabled" : ""}>
+        <span class="sp-pname">${escapeHtml(p2?.name || "選手2")}</span>
+        <span class="sp-ppts">${t.p2Bp}</span>
+      </button>
+    </div>
+    <div class="sp-hint">${
+      t.done
+        ? t.draw
+          ? "完場 · 無分"
+          : `完場 · ${escapeHtml(playerById(t.winnerId)?.name || "")} 勝`
+        : padPickSide
+          ? "再撳完場方式"
+          : "撳邊個贏咗呢一盤，再撳 Extreme／Over／Burst／Spin"
+    }</div>
+    ${
+      t.done
+        ? `<button type="button" class="sp-next" data-sp="back">下一場</button>`
+        : can
+          ? `<div class="sp-finishes ${padPickSide ? "ready" : "wait"}">
+        ${finishes
+          .map(
+            (f) =>
+              `<button type="button" class="sp-fin sp-fin-${f.id}" data-sp="fin" data-ft="${f.id}" ${padPickSide ? "" : "disabled"}><b>${f.pts}</b><span>${f.lab}</span></button>`
+          )
+          .join("")}
+        <button type="button" class="sp-fin sp-fin-draw" data-sp="fin" data-ft="draw"><b>0</b><span>同時完場</span></button>
+      </div>`
+          : `<div class="sp-warn">${entry.round?.locked ? "本輪已鎖定" : "無法入分"}</div>`
+    }
+    <div class="sp-tools">
+      <div class="sp-last">${escapeHtml(lastTxt)} · ${m.battles?.length || 0} 盤</div>
+      <button type="button" class="sp-undo" data-sp="undo" ${!can || !m.battles?.length ? "disabled" : ""}>還原上一盤</button>
+    </div>
+  `;
+}
+
+function onScorePadClick(e) {
+  const btn = e.target.closest("[data-sp]");
+  if (!btn || padBusy) return;
+  const act = btn.dataset.sp;
+  if (act === "desk") {
+    if (getDeviceRole() === "score") {
+      if (!confirm("離開計分板，改睇大會畫面？手機之後可以再撳「計分板」。")) return;
+    }
+    closeScorePad();
+    return;
+  }
+  if (act === "zone") {
+    setPadZoneFilter(btn.dataset.z || "all");
+    padOpenKey = null;
+    renderScorePad();
+    return;
+  }
+  if (act === "open") {
+    padOpenKey = btn.dataset.key;
+    padPickSide = null;
+    renderScorePad();
+    return;
+  }
+  if (act === "back") {
+    padOpenKey = null;
+    padPickSide = null;
+    renderScorePad();
+    return;
+  }
+  const entry = padOpenKey ? findPadEntry(padOpenKey) : null;
+  if (act === "pick") {
+    padPickSide = btn.dataset.side === "p2" ? "p2" : "p1";
+    renderScorePad();
+    return;
+  }
+  if (act === "undo") {
+    if (entry) padUndoBattle(entry);
+    return;
+  }
+  if (act === "fin") {
+    if (!entry) return;
+    const ft = btn.dataset.ft;
+    let winnerId = null;
+    if (ft !== "draw") {
+      if (!padPickSide) {
+        toast("先撳邊個贏", "error");
+        return;
+      }
+      winnerId = padPickSide === "p1" ? entry.match.p1 : entry.match.p2;
+    }
+    padBusy = true;
+    try {
+      padRecordBattle(entry, winnerId, ft);
+    } finally {
+      setTimeout(() => {
+        padBusy = false;
+      }, 180);
+    }
+  }
+}
+
 function render() {
   document.getElementById("phasePill").textContent = phaseLabel();
   document.getElementById("roundPill").textContent =
@@ -4199,6 +4650,7 @@ function render() {
   renderBackupPanel();
   renderHeaderTime();
   updateSyncUi();
+  if (isScorePadOpen()) renderScorePad();
 }
 
 function renderHeaderTime() {
@@ -6589,7 +7041,9 @@ function updateSyncUi() {
       banner.classList.remove("hidden");
       banner.classList.toggle("host", !!st.isHost);
       bannerText.textContent = st.isHost
-        ? `☁ 比賽 ${st.roomId} · 主持模式（可改分）`
+        ? getDeviceRole() === "score"
+          ? `☁ ${st.roomId} · 計分板（入分會即時上主電腦）`
+          : `☁ 比賽 ${st.roomId} · 大會主電腦（投影／選手／賽果）`
         : `☁ 比賽 ${st.roomId} · 只讀（即時同步）`;
     } else {
       banner.classList.add("hidden");
@@ -6605,7 +7059,11 @@ function updateSyncUi() {
     } else {
       statusBox.textContent = [
         `比賽 ID：${st.roomId}`,
-        st.isHost ? "角色：主持（可寫）" : "角色：只讀",
+        st.isHost
+          ? getDeviceRole() === "score"
+            ? "角色：計分板（可寫）"
+            : "角色：大會主電腦（可寫）"
+          : "角色：只讀",
         st.connected ? "狀態：已連線" : "狀態：離線／重連中",
         st.pendingPush ? "有變更等待上傳…" : "",
       ]
@@ -6672,6 +7130,7 @@ async function handleCloudCreate() {
     }
     // 先確保有最新 rev 寫入本機
     saveState();
+    setDeviceRole("desk");
     const { roomId } = await sync.createRoom(p1, state);
     const result = document.getElementById("cloudCreateResult");
     if (result) {
@@ -6679,7 +7138,7 @@ async function handleCloudCreate() {
       result.innerHTML = `
         <p>已建立！請抄低／分享：</p>
         <div class="sync-id-big">${roomId}</div>
-        <p class="hint">主持碼只得你知；其他人只輸入比賽 ID 就係只讀。</p>
+        <p class="hint">手機／iPad：加入比賽 → 揀「計分板」→ 填 ID 同主持碼。只睇投影：只填 ID。</p>
         <div class="btn-row wrap" style="justify-content:center">
           <button type="button" class="btn btn-primary" id="btnCloudCreateCopy">複製比賽 ID</button>
         </div>`;
@@ -6707,7 +7166,13 @@ async function handleCloudJoin() {
     return;
   }
   const roomId = document.getElementById("cloudJoinId")?.value || "";
-  const pass = document.getElementById("cloudJoinPass")?.value || "";
+  const joinRole = document.querySelector('input[name="joinRole"]:checked')?.value || "score";
+  let pass = document.getElementById("cloudJoinPass")?.value || "";
+  if (joinRole !== "view" && !String(pass).trim()) {
+    toast("計分板同大會主電腦都要填主持碼", "error");
+    return;
+  }
+  if (joinRole === "view") pass = "";
   try {
     if (sync.getRoomId?.()) {
       await sync.flush?.(state);
@@ -6733,11 +7198,18 @@ async function handleCloudJoin() {
       );
     }
     closeModal("cloudJoinModal");
+    const role = joined.role === "host" ? joinRole : "view";
+    setDeviceRole(role);
     updateSyncUi();
-    toast(
-      joined.role === "host" ? `已以主持加入 ${joined.roomId}` : `已只讀加入 ${joined.roomId}`,
-      "success"
-    );
+    if (role === "score") {
+      openScorePad();
+      toast(`已連線 ${joined.roomId} · 計分板`, "success");
+    } else {
+      toast(
+        joined.role === "host" ? `已以大會主電腦加入 ${joined.roomId}` : `已只讀加入 ${joined.roomId}`,
+        "success"
+      );
+    }
   } catch (e) {
     console.error(e);
     toast(e.message || String(e), "error");
@@ -6785,6 +7257,13 @@ function bindCloudSyncUi() {
   document.getElementById("btnCloseCloudId")?.addEventListener("click", () => closeModal("cloudIdModal"));
   document.getElementById("btnCloudCreateConfirm")?.addEventListener("click", () => handleCloudCreate());
   document.getElementById("btnCloudJoinConfirm")?.addEventListener("click", () => handleCloudJoin());
+  const syncJoinRoles = () => {
+    document.querySelectorAll(".join-role").forEach((lab) => {
+      lab.classList.toggle("on", !!lab.querySelector("input")?.checked);
+    });
+  };
+  document.getElementById("joinRoleGroup")?.addEventListener("change", syncJoinRoles);
+  syncJoinRoles();
   document.getElementById("btnCloudCopyId")?.addEventListener("click", async () => {
     const id = sync.getRoomId();
     if (!id) return;
@@ -6817,9 +7296,12 @@ function bindCloudSyncUi() {
       });
     }
     updateSyncUi();
+    if (getDeviceRole() === "score") openScorePad();
     toast(
       resumed.role === "host"
-        ? `已恢復主持連線 ${resumed.roomId}`
+        ? getDeviceRole() === "score"
+          ? `已恢復計分板 ${resumed.roomId}`
+          : `已恢復主持連線 ${resumed.roomId}`
         : `已恢復只讀連線 ${resumed.roomId}`,
       "success"
     );
@@ -7006,6 +7488,9 @@ function init() {
   document.getElementById("btnRegenPairing").addEventListener("click", regeneratePairing);
   document.getElementById("btnLockRound").addEventListener("click", lockRoundAndAdvance);
   document.getElementById("btnManualPair").addEventListener("click", openManualModal);
+  document.getElementById("btnPairOpenPad")?.addEventListener("click", openScorePad);
+  document.getElementById("btnOpenScorePad")?.addEventListener("click", openScorePad);
+  document.getElementById("scorePad")?.addEventListener("click", onScorePadClick);
   document.getElementById("btnCloseScore").addEventListener("click", closeScoreModal);
   document.getElementById("btnCloseManual").addEventListener("click", closeManualModal);
   document.getElementById("btnCloseBeyOrder")?.addEventListener("click", closeBeyOrderModal);
@@ -7066,6 +7551,12 @@ function init() {
   });
 
   render();
+  try {
+    const q = new URLSearchParams(location.search);
+    if (q.get("pad") === "1" || q.get("mode") === "score" || getDeviceRole() === "score") {
+      openScorePad();
+    }
+  } catch (_) {}
 }
 
 init();
