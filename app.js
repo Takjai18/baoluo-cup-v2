@@ -4347,6 +4347,76 @@ function padVibrate() {
   } catch (_) {}
 }
 
+function padVideoFileName() {
+  const ts = new Date();
+  const stamp =
+    ts.getFullYear() +
+    String(ts.getMonth() + 1).padStart(2, "0") +
+    String(ts.getDate()).padStart(2, "0") +
+    "_" +
+    String(ts.getHours()).padStart(2, "0") +
+    String(ts.getMinutes()).padStart(2, "0");
+  const entry = padOpenKey ? findPadEntry(padOpenKey) : null;
+  const p1 = entry ? playerById(entry.match?.p1)?.name : "";
+  const p2 = entry ? playerById(entry.match?.p2)?.name : "";
+  const vs = p1 && p2 ? `${p1}vs${p2}` : "比賽";
+  const zone = entry?.zoneCode || "";
+  const raw = ["寶螺盃", zone, vs, stamp].filter(Boolean).join("_");
+  return raw.replace(/[\\/:*?"<>|]+/g, "") + ".mp4";
+}
+
+function padStartCapture() {
+  const input = document.getElementById("padVideoCapture");
+  if (!input) {
+    toast("呢部裝置開唔到鏡頭", "error");
+    return;
+  }
+  input.value = "";
+  input.click();
+}
+
+function padDownloadLocal(file, name) {
+  const url = URL.createObjectURL(file);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name || file.name || "baoluo.mp4";
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  toast("已交俾你部手機儲存。網站同雲端都冇存片。", "success");
+}
+
+async function padOnVideoCaptured(ev) {
+  const input = ev.target;
+  const src = input.files && input.files[0];
+  input.value = "";
+  if (!src) return;
+  const name = padVideoFileName();
+  const file =
+    src.name && src.name !== "blob"
+      ? src
+      : new File([src], name, { type: src.type || "video/mp4" });
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        files: [file],
+        title: name,
+        text: "寶螺盃比賽紀錄 · 請揀「儲存影片」到相簿。唔好傳到雲端。",
+      });
+      toast("影片只喺你部手機。網站同雲端都冇存。", "success");
+      return;
+    }
+  } catch (err) {
+    if (err && err.name === "AbortError") {
+      padDownloadLocal(file, name);
+      return;
+    }
+  }
+  padDownloadLocal(file, name);
+}
+
 /** 頭 3 盤已用過嘅陀螺 index；第 4 盤起唔再限制。 */
 function padUsedBeySet(match, side) {
   const battles = match?.battles || [];
@@ -4527,6 +4597,7 @@ function renderScorePad() {
   top.innerHTML = `
     <div class="sp-bar">
       <div class="sp-bar-id">${roomId ? escapeHtml(roomId) : "本機"} · 計分板</div>
+      <button type="button" class="sp-icon sp-rec" data-sp="rec" title="用手機拍片，只存你部機">拍片</button>
       <button type="button" class="sp-icon" data-sp="desk" title="返大會畫面">大會</button>
     </div>
     <div class="sp-scoreline">${openN} 場進行中</div>
@@ -4591,6 +4662,7 @@ function renderScorePadMatch(top, body, entry, meta) {
     <div class="sp-bar">
       <button type="button" class="sp-icon" data-sp="back">← 場次</button>
       <div class="sp-bar-id">${escapeHtml(entry.zoneCode || "")} · ${escapeHtml(entry.label)}</div>
+      <button type="button" class="sp-icon sp-rec" data-sp="rec" title="用手機拍片，只存你部機">拍片</button>
       <button type="button" class="sp-icon" data-sp="desk">大會</button>
     </div>
   `;
@@ -4651,6 +4723,10 @@ function onScorePadClick(e) {
   const btn = e.target.closest("[data-sp]");
   if (!btn || padBusy) return;
   const act = btn.dataset.sp;
+  if (act === "rec") {
+    padStartCapture();
+    return;
+  }
   if (act === "desk") {
     if (getDeviceRole() === "score") {
       if (!confirm("離開計分板，改睇大會畫面？手機之後可以再撳「計分板」。")) return;
@@ -7587,6 +7663,9 @@ function init() {
   document.getElementById("btnPairOpenPad")?.addEventListener("click", openScorePad);
   document.getElementById("btnOpenScorePad")?.addEventListener("click", openScorePad);
   document.getElementById("scorePad")?.addEventListener("click", onScorePadClick);
+  document.getElementById("padVideoCapture")?.addEventListener("change", (e) => {
+    padOnVideoCaptured(e);
+  });
   document.getElementById("btnCloseScore").addEventListener("click", closeScoreModal);
   document.getElementById("btnCloseManual").addEventListener("click", closeManualModal);
   document.getElementById("btnCloseBeyOrder")?.addEventListener("click", closeBeyOrderModal);

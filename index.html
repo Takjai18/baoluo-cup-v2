@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@500;700;900&family=Oswald:wght@600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260825c" />
+  <link rel="stylesheet" href="styles.css?v=20260825d" />
 </head>
 <body>
   <!-- 官方風格螢光黃綠 Banner：教會 | 寶螺盃 | BX Logo -->
@@ -853,6 +853,7 @@
   <div id="scorePad" class="score-pad hidden" aria-hidden="true">
     <div class="sp-top" id="scorePadTop"></div>
     <div class="sp-body" id="scorePadBody"></div>
+    <input id="padVideoCapture" class="sp-video-input" type="file" accept="video/*" capture="environment" tabindex="-1" aria-hidden="true" />
   </div>
 
   <div id="toast" class="toast hidden"></div>
@@ -864,6 +865,6 @@
   <!-- cache-bust：確保 GitHub Pages 載入最新 JS -->
   <script src="parts.js?v=20260824a"></script>
   <script src="cutoff.js?v=20260824a"></script>
-  <script src="app.js?v=20260825c"></script>
+  <script src="app.js?v=20260825d"></script>
 </body>
 </html>

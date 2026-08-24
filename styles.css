@@ -3577,6 +3577,18 @@ body.is-score-pad #app {
   font-weight: 700;
   font-size: 0.9rem;
 }
+.sp-icon.sp-rec {
+  background: #2a1200;
+  border-color: #ff7a3b;
+  color: #ffd0b8;
+}
+.sp-video-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+}
 .sp-scoreline {
   text-align: center;
   font-size: 1.15rem;
