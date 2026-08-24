@@ -998,6 +998,27 @@ const Sync = globalThis.BaoluoSync;
   assert((out.rounds || []).length === 0, "重置後新場次唔好合併舊輪次");
   assert(out.instanceId === "t_new", "保留新場 instanceId");
 }
+{
+  const stalePhone = {
+    instanceId: "t_old",
+    phase: "done",
+    players: [{ id: "p1", name: "舊" }],
+    rounds: [{ round: 1, matches: [] }],
+    currentRound: 5,
+    _rev: 80,
+  };
+  const newRoom = {
+    instanceId: "t_new",
+    phase: "setup",
+    players: [],
+    rounds: [],
+    currentRound: 0,
+    _rev: 1,
+  };
+  const out = Sync.mergeTournamentStates(stalePhone, newRoom);
+  assert((out.players || []).length === 1, "merge 兩場唔同時保留本機（push 層要拒絕寫入）");
+  assert(out.instanceId === "t_old", "instance 唔同時 merge 唔好改成本機舊場");
+}
 
 console.log("\n════════════════════════");
 console.log(`結果：${passed} passed, ${failed} failed`);

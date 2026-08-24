@@ -623,7 +623,7 @@ function saveState(opts = {}) {
         (opts.fromRemote ? "已同步 " : "已儲存 ") + new Date().toLocaleTimeString("zh-HK");
     }
     if (opts.backup) pushAutoBackup(opts.backup);
-    if (!opts.fromRemote && window.BaoluoSync?.isHost?.()) {
+    if (!opts.fromRemote && cloudHydrated && window.BaoluoSync?.isHost?.()) {
       window.BaoluoSync.schedulePush(state);
     }
     return true;
@@ -684,18 +684,17 @@ function applyRemoteTournamentState(payload, opts = {}) {
   if (!apply) return;
 
   const parsed = payload.state;
-  if (
-    !opts.force &&
+  const idsDiffer = !!(
     state.instanceId &&
     parsed.instanceId &&
     state.instanceId !== parsed.instanceId
-  ) {
-    return;
-  }
+  );
   const pendingLocal =
     role === "host" &&
     !opts.force &&
     !payload.merged &&
+    !idsDiffer &&
+    getDeviceRole() !== "score" &&
     typeof window.BaoluoSync?.mergeTournamentStates === "function" &&
     (pendingPush || localRev > justPushed);
 
@@ -4223,6 +4222,8 @@ let padPickSide = null; // "p1" | "p2" | "draw"
 let padBeyP1 = 0;
 let padBeyP2 = 0;
 let padBusy = false;
+/** 計分板 refresh 後要等雲端套用完，先可以反寫，以免本機舊場污染新房 */
+let cloudHydrated = true;
 
 function getDeviceRole() {
   try {
@@ -7417,6 +7418,7 @@ async function joinCloudRoom(joinRole, roomId, pass) {
   }
   const role = joined.role === "host" ? joinRole : "view";
   setDeviceRole(role);
+  cloudHydrated = true;
   updateSyncUi();
   return { joined, role };
 }
@@ -7493,6 +7495,7 @@ async function handleCloudLeave() {
 function bindCloudSyncUi() {
   const sync = window.BaoluoSync;
   if (!sync) return;
+  if (getDeviceRole() === "score") cloudHydrated = false;
 
   document.getElementById("btnCloudCreate")?.addEventListener("click", () => {
     if (!sync.isConfigReady()) {
@@ -7558,25 +7561,34 @@ function bindCloudSyncUi() {
   // 恢復上次 session
   sync.resumeSession?.().then(async (resumed) => {
     if (!resumed) {
+      cloudHydrated = true;
       updateSyncUi();
       return;
     }
     const localRev = parseInt(state._rev, 10) || 0;
     const remoteRev = parseInt(resumed.rev, 10) || 0;
-    if (resumed.role === "host" && localRev > remoteRev) {
+    const remoteId = resumed.state && resumed.state.instanceId;
+    const idsDiffer = !!(state.instanceId && remoteId && state.instanceId !== remoteId);
+    const scorePad = getDeviceRole() === "score";
+    // 計分板／舊場本機：refresh 後以雲端為準，唔好把舊 localStorage 推上新房
+    if (resumed.state && (scorePad || idsDiffer || !(resumed.role === "host" && localRev > remoteRev))) {
+      applyRemoteTournamentState(
+        {
+          rev: resumed.rev,
+          state: resumed.state,
+          updatedAt: null,
+        },
+        { force: true }
+      );
+    } else if (resumed.role === "host" && localRev > remoteRev) {
       await sync.flush?.(state);
-    } else if (resumed.state) {
-      applyRemoteTournamentState({
-        rev: resumed.rev,
-        state: resumed.state,
-        updatedAt: null,
-      });
     }
+    cloudHydrated = true;
     updateSyncUi();
-    if (getDeviceRole() === "score") openScorePad();
+    if (scorePad) openScorePad();
     toast(
       resumed.role === "host"
-        ? getDeviceRole() === "score"
+        ? scorePad
           ? `已恢復計分板 ${resumed.roomId}`
           : `已恢復主持連線 ${resumed.roomId}`
         : `已恢復只讀連線 ${resumed.roomId}`,
@@ -7585,6 +7597,8 @@ function bindCloudSyncUi() {
   });
 
   const flushCloud = () => {
+    if (!cloudHydrated) return;
+    if (getDeviceRole() === "score" && !sync.getRoomId?.()) return;
     if (sync.isHost?.()) sync.flush?.(state);
   };
   window.addEventListener("pagehide", flushCloud);

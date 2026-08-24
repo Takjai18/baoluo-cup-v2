@@ -564,6 +564,17 @@
         let next = cloneForFirestore(tournamentState || {});
         let nextRev = parseInt(next._rev, 10) || 0;
         let merged = false;
+        const localId = next.instanceId || null;
+        const remoteId = (remote.state && remote.state.instanceId) || null;
+        if (remoteId && localId !== remoteId) {
+          // 本機仲係舊場、雲端已係新場：唔好把舊選手寫入新房
+          return {
+            state: remote.state,
+            rev: remoteRev,
+            merged: false,
+            rejected: true,
+          };
+        }
         if (remote.state && remoteRev > lastPushedRev) {
           next = mergeTournamentStates(next, remote.state);
           nextRev = Math.max(nextRev, remoteRev) + 1;
@@ -582,7 +593,7 @@
       lastPushedRev = result.rev;
       pendingPush = false;
       emitStatus();
-      if (result.merged && result.state) {
+      if ((result.merged || result.rejected) && result.state) {
         remoteListeners.forEach((fn) => {
           try {
             fn({
