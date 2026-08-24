@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#0a0a0a" />
+  <title>寶螺盃 · 瑞士制管理系統</title>
+  <!-- 官方感：粗體 condensed 英字 + 繁中 Noto -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@500;700;900&family=Oswald:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css?v=20260824a" />
+</head>
+<body>
+  <!-- 官方風格螢光黃綠 Banner：教會 | 寶螺盃 | BX Logo -->
+  <div class="bx-banner" role="banner">
+    <div class="bx-banner-inner">
+      <div class="bx-banner-left">
+        <p class="bx-banner-orgs">
+          <span class="bx-org-line">九龍城基督徒會</span>
+          <span class="bx-org-x" aria-hidden="true">×</span>
+          <span class="bx-org-line">宣道會基蔭堂</span>
+        </p>
+      </div>
+      <h1 class="bx-banner-title">寶螺盃</h1>
+      <div class="bx-banner-right">
+        <div class="bx-logo-wrap" title="Beyblade X">
+          <img
+            class="bx-logo-img"
+            src="assets/beyblade-x-logo.jpg"
+            alt="Beyblade X"
+            width="160"
+            height="100"
+            decoding="async"
+          />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="app">
+    <!-- Header：階段狀態 -->
+    <header class="header">
+      <div class="header-brand">
+        <div>
+          <p class="subtitle">瑞士制管理系統 · 現場計分 · v2</p>
+        </div>
+      </div>
+      <div class="header-status">
+        <div class="status-pill sync" id="syncPill" title="雲端同步">本機</div>
+        <div class="status-pill" id="phasePill">準備中</div>
+        <div class="status-pill round" id="roundPill">—</div>
+      </div>
+    </header>
+
+    <div id="syncBanner" class="sync-banner hidden" role="status">
+      <span id="syncBannerText"></span>
+      <div class="btn-row wrap">
+        <button type="button" class="btn btn-ghost btn-sm" id="btnSyncShowId">顯示比賽 ID</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="btnSyncLeave">離開雲端</button>
+      </div>
+    </div>
+
+    <!-- Nav -->
+    <nav class="nav" id="mainNav">
+      <button class="nav-btn" data-tab="settings">⓪ 大會設定</button>
+      <button class="nav-btn" data-tab="rules">規則</button>
+      <button class="nav-btn" data-tab="players">① 選手</button>
+      <button class="nav-btn" data-tab="pairings">② 對戰表</button>
+      <button class="nav-btn" data-tab="standings">③ 排名</button>
+      <button class="nav-btn" data-tab="history">④ 詳細戰績</button>
+      <button class="nav-btn" data-tab="ties">⑤ 同分</button>
+      <button class="nav-btn" data-tab="knockout">⑥ 淘汰賽</button>
+      <button class="nav-btn" data-tab="draw">抽籤</button>
+      <button class="nav-btn" data-tab="export">⑦ 匯出</button>
+    </nav>
+
+    <main class="main">
+      <!-- ===== SETTINGS ===== -->
+      <section id="tab-settings" class="tab">
+        <div class="panel">
+          <div class="panel-header">
+            <h2>大會設定</h2>
+            <div class="btn-row">
+              <button class="btn btn-primary" id="btnSaveSettings" type="button">儲存設定</button>
+            </div>
+          </div>
+          <div class="hint">
+            可設定<strong>參賽人數</strong>（8／16／32／64／自訂，單雙數都得）、裁判、對戰盤、瑞士制輪次、淘汰賽規模、<strong>入圍規則 A／B</strong>。
+            下面計算器會按人數建議<strong>瑞士輪數</strong>同<strong>淘汰賽規模</strong>（可無視）。可用報到站 = <strong>min(裁判, 對戰盤)</strong>，對戰會分派到 A／B／C… 區。
+          </div>
+          <div class="settings-grid">
+            <label class="settings-field">
+              <span class="section-label">參賽人數</span>
+              <select id="setPlayerPreset" class="input select part-select">
+                <option value="8">8 人</option>
+                <option value="16" selected>16 人</option>
+                <option value="32">32 人</option>
+                <option value="64">64 人</option>
+                <option value="other">其他（自訂）</option>
+              </select>
+            </label>
+            <label class="settings-field" id="playerCountCustomWrap" style="display:none">
+              <span class="section-label">自訂人數</span>
+              <input type="number" id="setPlayerCountCustom" class="input" min="2" max="128" step="1" value="16" inputmode="numeric" />
+            </label>
+            <label class="settings-field">
+              <span class="section-label">裁判人數</span>
+              <select id="setReferees" class="input select part-select">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4" selected>4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="7">7</option>
+                <option value="8">8</option>
+                <option value="10">10</option>
+                <option value="12">12</option>
+                <option value="16">16</option>
+              </select>
+            </label>
+            <label class="settings-field">
+              <span class="section-label">對戰盤數量</span>
+              <select id="setStadiums" class="input select part-select">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4" selected>4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="7">7</option>
+                <option value="8">8</option>
+                <option value="10">10</option>
+                <option value="12">12</option>
+                <option value="16">16</option>
+              </select>
+            </label>
+            <label class="settings-field">
+              <span class="section-label">瑞士制輪次</span>
+              <select id="setSwissRounds" class="input select part-select">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4" selected>4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="7">7</option>
+                <option value="8">8</option>
+              </select>
+            </label>
+            <label class="settings-field">
+              <span class="section-label">淘汰賽規模</span>
+              <select id="setKoSize" class="input select part-select">
+                <option value="4" selected>4 強（1v4、2v3）</option>
+                <option value="8">8 強（1v8…4v5）</option>
+                <option value="16">16 強（1v16…8v9）</option>
+              </select>
+            </label>
+            <label class="settings-field">
+              <span class="section-label">入圍規則</span>
+              <select id="setQualifyRule" class="input select part-select">
+                <option value="A" selected>規則 A（完整決策樹）</option>
+                <option value="B">規則 B（簡易規則）</option>
+              </select>
+            </label>
+          </div>
+          <p class="hint" id="qualifyRuleHint" style="margin-top:8px">規則 A 為完整決策樹；規則 B 為簡易入圍（獎勵壓制）。詳情見「規則」頁。</p>
+          <div id="swissCalcPanel" class="mt-16"></div>
+          <div id="settingsPreview" class="mt-16"></div>
+          <div class="hint mt-16" style="margin-bottom:0">
+            人數可單可雙（單數該輪一人輪空）；比賽開始後不可再改人數。開賽時亦可用現有名單人數。
+            瑞士輪數有建議計算器（可無視警告）。淘汰種子：第1 vs 第N、第2 vs 第N−1…
+          </div>
+        </div>
+
+        <div class="panel mt-16" id="cloudSyncPanel">
+          <div class="panel-header">
+            <h2>☁ 雲端同步（多裝置）</h2>
+          </div>
+          <div class="hint">
+            用<strong>比賽 ID</strong>讓多部電腦睇同一場。多部計分機都可以輸入<strong>主持碼</strong>一齊改分（系統會合併賽果）；只填 ID、唔填主持碼＝只讀／投影。
+            未設定 Firebase 時呢度會提示，App 仍可本機單機用。
+          </div>
+          <div id="cloudSyncStatus" class="sync-status-box mt-16">未連線 · 本機模式</div>
+          <div class="btn-row wrap mt-16">
+            <button type="button" class="btn btn-primary" id="btnCloudCreate">建立雲端比賽</button>
+            <button type="button" class="btn btn-ghost" id="btnCloudJoin">加入比賽</button>
+            <button type="button" class="btn btn-ghost" id="btnCloudShowId" disabled>顯示比賽 ID</button>
+            <button type="button" class="btn btn-ghost" id="btnCloudLeave" disabled>離開雲端</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== RULES ===== -->
+      <section id="tab-rules" class="tab">
+        <div class="panel">
+          <div class="panel-header">
+            <h2>比賽規則</h2>
+            <span class="badge" id="rulesCurrentBadge">現行：規則 A</span>
+          </div>
+          <p class="hint">主持可撳標題<strong>收起／展開</strong>第一部份（陀螺比賽規則）或第二部份（入圍規則）。入圍用邊套規則喺「⓪ 大會設定」揀。</p>
+        </div>
+
+        <details class="rules-block" id="rulesBattle" open>
+          <summary>第一部份：陀螺比賽規則（Beyblade X 第 12 版 · 2026年3月 · 亞洲版）</summary>
+          <div class="rules-body">
+            <p class="meta">中文整理供寶螺盃現場參考。原文：<a href="https://www.probladers.it/beyblade-x-rules-v12.pdf" target="_blank" rel="noopener">Beyblade X Regulations 12th edition (Asia ver.)</a>　© タカラトミー／BB Project　所有判決以現場裁判為準。</p>
+            <p><strong>Battle</strong>＝一次勝負判定嘅最小單位。<strong>Match</strong>＝連續多場 Battle 直到分出勝方。</p>
+
+            <h4>關於陀螺</h4>
+            <ol>
+              <li>只可用 2023 年 7 月起正式發售嘅 Beyblade X 系列陀螺、發射器、對戰盤及工具。舊世代不可用。</li>
+              <li>入選「名人堂」嘅陀螺不可用於只出一隻嘅對戰；3on3、團體賽等出多隻時可以用。</li>
+              <li>陀螺檢查同勝負判定一律跟裁判判決。</li>
+              <li>未經授權改裝或故意作弊可取消資格。</li>
+            </ol>
+
+            <h4>陀螺檢查</h4>
+            <ol>
+              <li>只可用 X 系列正式零件改裝。</li>
+              <li>禁止省略應有零件，或將零件用非設計用途組合。</li>
+              <li>禁止拆解／改裝正式零件再使用。塗裝：一般禁止改性能、損對手／場地、塗接觸面；侵害權利或公序良俗嘅改裝由裁判判定。貼紙：非官方貼紙、改性能、損對手、貼接觸面、裁切貼紙等一般禁止；Unique Line 齒輪芯片上可再貼一張官方貼紙。</li>
+              <li>零件上圖示陰影區可塗裝，前提係唔違反上述禁止。</li>
+              <li>禁止使用已改動／強化原性能嘅零件。</li>
+              <li>出示陀螺後，除非裁判批准，否則不可更換。批准時雙方都可換。</li>
+              <li>裁判可拆開雙方上蓋、鎖定芯片、主刃、超越刃、金屬刃、輔助刃、固鎖、軸心檢查後退回。</li>
+              <li>雙方互睇陀螺正反面，唔交手傳遞。</li>
+              <li>模式切換（Mode-Change）、固鎖方向等，每場 Battle 可改，但要先給對手睇並向裁判提出。</li>
+              <li>發射後變形嘅陀螺，再次發射前要喺時限內還原。</li>
+              <li>Match 進行中不可交換陀螺或零件；一場 Match 完、對手更換後先可以換。</li>
+              <li>對檢查有疑問即場問裁判。開賽後或第三者意見唔接受。</li>
+            </ol>
+
+            <h4>發射器檢查（含握把）</h4>
+            <ol>
+              <li>禁止省略應有零件或非設計用途組合。</li>
+              <li>禁止拆解／改裝正式發射器同握把。塗裝、貼紙限制同上（接觸面、改性能、損對手、非官方貼紙、Battle Pass 貼紙等）。</li>
+              <li>禁止使用已改動／強化原性能嘅零件。</li>
+              <li>裁判認為有改裝或損壞，禁止使用。</li>
+              <li>更換發射器／握把後，裁判會再檢查。</li>
+              <li>裝飾干擾對戰可被要求拆除。</li>
+            </ol>
+
+            <h4>對戰盤</h4>
+            <ol>
+              <li>只可用 Beyblade X 系列場地。</li>
+              <li>場地＝盤身＋蓋。</li>
+              <li>發射口＝蓋中央開孔。</li>
+              <li>Xtreme Line＝固定喺盤身嘅軌道。</li>
+            </ol>
+            <p class="meta">場地種類：Xtreme Stadium、Wide Xtreme Stadium、Infinity Stadium。Over Zone／Xtreme Zone／Battle Zone 以各場地說明為準。</p>
+
+            <h4>發射方法</h4>
+            <ol>
+              <li>發射高度：盤身以上 20cm 或以內。</li>
+              <li>用猜拳等方式決定發射位置（左／右／中），該場 Match 期間不可改。</li>
+              <li>原則上要等自己陀螺有一部分進入所選發射位先準備；若雙方站位互不干擾，裁判可豁免。</li>
+              <li>禁止以身體、發射器或配件干擾對手發射。對手手、臂、發射器等進入你發射區可即場報告。故意接觸可取消資格。</li>
+              <li>口令：「Three, Two, One, Go Shoot」。</li>
+              <li>陀螺要穿過發射口。</li>
+              <li>裁判叫到 Shoot 嗰下發射。</li>
+              <li>唔可以陀螺貼地發射。故意貼地接觸可取消資格。</li>
+              <li>喺指定斜線區準備站位。Wide Xtreme 要面向所選發射標記。</li>
+            </ol>
+
+            <h4>對戰中</h4>
+            <ol>
+              <li>發射後後退一步。</li>
+              <li>唔好探頭入場。</li>
+              <li>發射時陀螺未離開發射器、口令後跌出指定發射區並碰到蓋外＝發射失誤。</li>
+              <li>口令前射出＝搶射；口令完成後先射出＝延遲發射。</li>
+              <li>以上由裁判判定並警告。</li>
+              <li>雙方陀螺穿過發射口並接觸場地後對戰開始。空中相撞或零件未落地則未開始，重開。</li>
+              <li>疑問即場問裁判。</li>
+              <li>未經許可唔好接觸場地或場內陀螺。</li>
+              <li>危險發射或破壞公平，裁判可停止並重賽。</li>
+            </ol>
+
+            <h4>勝負判定（寶螺盃採用：先到 4 分贏 Match）</h4>
+            <ol>
+              <li>喺戰鬥區轉得耐過對手者勝該場 Battle。</li>
+              <li>一切跟裁判。</li>
+              <li>無發射失誤／搶射／延遲時，按完場方式計分：
+                <ul>
+                  <li><strong>Xtreme Finish</strong>：對手整隻陀螺完全進入 Xtreme Zone 且返唔到戰鬥區 → <strong>3 分</strong></li>
+                  <li><strong>Over Finish</strong>：對手整隻完全進入 Over Zone 且返唔到戰鬥區 → <strong>2 分</strong></li>
+                  <li><strong>Burst Finish</strong>：對手零件分離（上蓋、鎖定芯片、主刃、超越刃、金屬刃、輔助刃、固鎖或軸心）→ <strong>2 分</strong></li>
+                  <li><strong>Spin Finish</strong>：對手喺戰鬥區原轉向轉速歸零，而你仍轉 → <strong>1 分</strong></li>
+                </ul>
+                GRIFFON 脫落嘅子彈唔計勝負；以本體為準。
+              </li>
+              <li>以上完場同時發生＝平手，重賽。</li>
+              <li>同一 Battle 有多種完場，以<strong>先發生</strong>者為準。</li>
+              <li>整隻陀螺進入 Xtreme／Over 或離場後仍轉住返回戰鬥區＝Reverse：該次 Xtreme／Over 取消，重賽。</li>
+              <li>裁判宣布結果前接觸場內陀螺，可被判負該 Match。</li>
+              <li>惡意干擾可取消資格。</li>
+              <li>對戰中身體、發射器、裝飾一律唔好接觸場地。故意觸碰可取消資格。（線拉發射器手柄觸場、裁判認為唔影響者除外。）</li>
+              <li>取消資格後，過往賽果唔推翻，由宣判一刻生效。無法判定完場（例如由非 Over／Xtreme 位置離場返唔到）由裁判決定重賽或點處理。同一 Battle 雙方合共兩次發射失誤／搶射／延遲：對方得 1 分並重賽該場。</li>
+            </ol>
+
+            <h4>3on3（三隻輪流出場）</h4>
+            <ol>
+              <li>按預定次序放入盒內並接受檢查。同一零件唔可喺三隻重複用（顏色不同都算同一件）。CX 定制線鎖定芯片「女武神」「帝皇」各限一；其他鎖定芯片可重複。</li>
+              <li>未經裁判批准，Match 中不可改三隻次序或組合。</li>
+              <li>未備齊三隻由裁判提供租借陀螺，之後每場都要用租借。</li>
+              <li>先累積 4 分者勝。一次出一隻，跟登記次序。平手用同一隻重賽。三場仍未分可改次序後繼續。</li>
+            </ol>
+
+            <h4>其他</h4>
+            <ol>
+              <li>參賽即視為理解本規則。</li>
+              <li>禁止破壞公平嘅提示或威嚇性歡呼。</li>
+              <li>禁止辱罵、誹謗等傷害選手、觀眾、職員、裁判嘅行為。</li>
+              <li>禁止妨礙賽事運作。</li>
+              <li>禁止用違反公序良俗或可識別個人資料嘅名稱參賽。</li>
+              <li>上傳賽事影片／相片，若內容導致誹謗，上載者自費負責；TAKARA TOMY 不負責此類爭議。</li>
+              <li>請遵守規則享受比賽；違規可取消資格。</li>
+              <li>不遵守職員或裁判對 Beyblade X 使用嘅決定，可被要求退出。</li>
+            </ol>
+          </div>
+        </details>
+
+        <details class="rules-block" id="rulesQualify" open>
+          <summary>第二部份：寶螺盃入圍淘汰賽規則</summary>
+          <div class="rules-body">
+            <p class="hint">瑞士勝場先切線。規則 A／B 喺「⓪ 大會設定」揀；現行套會喺下面標示「現行」。</p>
+
+            <details class="rules-sub" id="rulesRuleA" open>
+              <summary>規則 A · 完整決策樹</summary>
+              <div class="rules-tree">
+                <h4>用語</h4>
+                <ul>
+                  <li><strong>K</strong>＝淘汰賽規模（4／8／16 強）</li>
+                  <li><strong>瑞士勝場</strong>＝贏一場瑞士 Match +1；單數<strong>自動獲勝（坐場）亦 +1</strong>；無分唔加</li>
+                  <li><strong>BP</strong>＝Battle 得分合計（Extreme 3、Over／Burst 2、Spin 1）。坐場 +0 BP</li>
+                  <li><strong>對賽</strong>＝兩人瑞士交手最近一場勝方</li>
+                  <li><strong>先到 4</strong>＝一方 ≥4 且嚴格領先即完場；3 分再 Extreme 可到 6。加賽唔可以無分完場</li>
+                </ul>
+
+                <h4>第 1 層：瑞士勝場切線</h4>
+                <ol>
+                  <li>按勝場由高至低。第 K 名嘅勝場＝裁切分 C。</li>
+                  <li>勝場 &gt; C → 鎖定入圍。勝場 &lt; C → 出局。勝場＝C → 爭席組。</li>
+                  <li>餘席 S＝K−鎖定人數。爭席組 N 人。N≤S → 全部入。N&gt;S → 繼續。</li>
+                </ol>
+
+                <h4>第 2 層：入圍同種子</h4>
+                <p>入圍名單＝鎖定者＋爭席組揀出嘅 S 人。種子只喺已入圍者入面排：勝場 →（剛好 2 人有對賽則對賽）→ 3 人以上只睇 BP → 姓名。</p>
+
+                <h4>第 3 層：爭席組先睇坐場次數</h4>
+                <ul>
+                  <li>全組坐場次數相同 → 第 4 層（可用瑞士 BP）</li>
+                  <li>得 1 人坐過 → 第 5 層</li>
+                  <li>2 人或以上坐過 → 第 6 層</li>
+                </ul>
+
+                <h4>第 4 層：同類人（BP → 對賽 → 加賽）</h4>
+                <ol>
+                  <li>按 BP 切。高過線先入，低過線出局，相等再拆。</li>
+                  <li><strong>2 人 1 席</strong>：有對賽勝方則入；否則加賽一場，打完加本場 BP 再比，仍同睇對賽。</li>
+                  <li><strong>3 人</strong>：AB／BC／AC 三場，加這三場 BP 再排。</li>
+                  <li><strong>4 人</strong>：抽兩場，加本場 BP 再排（打贏≠入圍）。</li>
+                  <li><strong>只淘汰 1 人</strong>：抽兩人打，負者出局（打贏留隊）。</li>
+                  <li><strong>5 人以上真同分</strong>：抽籤小型淘汰，打贏出線。5＝種子選手；6＝種子線；7＝種子＋種子線並行。</li>
+                </ol>
+                <p class="meta">計 BP 型：打贏≠入圍。打贏出線型：勝者入。無分必須再打。</p>
+
+                <h4>第 5 層：得 1 人坐過場</h4>
+                <ol>
+                  <li>未坐場者先用第 4 層排：前 S−1 名直入；第 S 名做挑戰者。</li>
+                  <li>呢步加賽分<strong>唔帶入</strong>之後同坐場者比。</li>
+                  <li>挑戰者 vs 坐場者：瑞士 BP <strong>差距 &gt;6</strong> → 唔打，高 BP 入。≤6 → 打一場，只加<strong>呢一場</strong> BP 再比總分；仍同睇對賽。</li>
+                </ol>
+
+                <h4>第 6 層：2 個或以上坐過場</h4>
+                <p>坐場者先打一輪<strong>補 BP</strong>，再同未坐場者一齊用總 BP／對賽決定。</p>
+                <ul>
+                  <li><strong>雙數</strong>：全部抽籤各打一場（未曾對賽優先）。每人補一場 BP。</li>
+                  <li><strong>單數（3／5／7…）</strong>：抽 1 名種子；其餘抽籤對賽；種子再抽籤對其中一組勝者。<strong>每人只計自己最後一場 BP</strong>（首輪再打種子嘅，首輪分唔計）。</li>
+                </ul>
+                <p>補完後，坐場者同未坐場者一齊：總 BP → 對賽 → 分唔開再加賽。</p>
+              </div>
+            </details>
+
+            <details class="rules-sub" id="rulesRuleB">
+              <summary>規則 B · 簡易規則（獎勵壓制）</summary>
+              <div class="rules-tree">
+                <h4>用語</h4>
+                <ul>
+                  <li><strong>K</strong>＝淘汰賽規模（4／8／16 強）</li>
+                  <li><strong>瑞士勝場</strong>＝贏一場瑞士 Match +1；自動獲勝亦 +1（單數入圍數學會扣返呢 1 分）</li>
+                  <li><strong>BP</strong>＝Battle 得分合計（Extreme 3、Over／Burst 2、Spin 1）。坐場 +0</li>
+                  <li><strong>淨勝分</strong>＝瑞士制已打場次嘅（自己 BP − 對手 BP）合計。坐場 0–0 唔計。獎勵壓制：四場 4–0 Spin 高過四場 6–3 Extreme</li>
+                  <li><strong>陀螺種子分</strong>＝登記三隻上蓋 <code>T0×2 + T1×1</code>（自訂上蓋唔計）。愈低愈優先做種子</li>
+                  <li><strong>加賽</strong>＝先到 4，<strong>打贏就入圍</strong>。無分必須重打</li>
+                </ul>
+
+                <h4>第 1 層：瑞士勝場切線</h4>
+                <ol>
+                  <li><strong>雙數參賽、全程無人自動勝</strong>：按瑞士勝場。第 K 名嘅勝場＝裁切分 C。高過 C 鎖定入圍，低過 C 出局，等於 C 為爭席組。</li>
+                  <li><strong>而家單數，或曾經有人自動勝</strong>（包括單數開場後加人變成雙數）：每人先扣自動獲勝次數，再用扣完後嘅勝場切線。高過線 100% 入，低過線 100% 出局，等於線而且人多過席＝爭席組。</li>
+                  <li>爭席組人數 ≤ 餘席 → 全部入。</li>
+                </ol>
+
+                <h4>第 2 層：而家雙數 · 紙上先分</h4>
+                <p>跟<strong>而家場上人數</strong>（唔跟開場時）。爭席組未加賽前：<strong>總淨勝分 → 總 BP → 對賽</strong>。高過線先入，低過線出局。單數開場之後加人變成雙數，亦行呢層。</p>
+                <ul>
+                  <li><strong>2 人 1 席</strong>：有對賽則勝方入；未曾對賽則加賽，勝者入。</li>
+                  <li>多人仍然同一條線 → 第 4 層加賽。</li>
+                </ul>
+
+                <h4>第 3 層：而家單數 · 爭席組直接打</h4>
+                <p>只喺<strong>而家場上人數係單數</strong>時用。扣坐場分後嘅爭席組<strong>一律加賽</strong>（唔用紙上淨勝分跳過）。淨勝分只用嚟排邊個打邊個、邊個做種子。</p>
+
+                <h4>第 4 層：加賽點分組（打贏出線）</h4>
+                <p>排法：淨勝分高至低 → 總 BP → 陀螺種子分低至高 → 仍然一樣就抽籤。</p>
+                <ol>
+                  <li><strong>雙數人、剛好多一半席</strong>（例如 4 人 2 席）：最高打最低、第二高打第二低，勝者入。</li>
+                  <li><strong>3 人 2 席</strong>：最高淨勝分種子直入；其餘兩人打，勝者入。</li>
+                  <li><strong>3 人 1 席</strong>：其餘兩人先打，勝者再打種子。</li>
+                  <li><strong>只淘汰 1 人</strong>：最低兩人打，負者出局，其餘直入。</li>
+                  <li><strong>席多過一半</strong>（例如 6 人 4 席）：最高若干人直入，其餘高打低，勝者入。</li>
+                  <li><strong>4 人 1 席／5 人以上（席少過一半）</strong>：種子選手／種子線小型淘汰；打完若勝者仍多過席，再按上面規則繼續，直到人數啱席。</li>
+                </ol>
+
+                <h4>第 5 層：種子選手／種子線</h4>
+                <p>最高淨勝分者為種子選手；雙數時佢對最低嗰條為種子線。淨勝分相同 → 總 BP → 對賽 → 陀螺種子分（有 T0 嘅人唔優先做種子；兩隻 T1 低過一隻 T1）→ 再一樣就隨機。</p>
+
+                <h4>第 6 層：入圍之後嘅淘汰賽種子</h4>
+                <p>已入圍者再排：瑞士勝場（單數用扣坐場後）→ 淨勝分 → 總 BP → 對賽。陀螺種子分<strong>只用於爭席加賽抽種子</strong>，唔再影響淘汰賽 1 號種子。</p>
+              </div>
+            </details>
+          </div>
+        </details>
+      </section>
+
+      <!-- ===== PLAYERS ===== -->
+      <section id="tab-players" class="tab">
+        <div class="panel">
+          <div class="panel-header">
+            <h2>選手登記 <span class="badge" id="playerCount">0 / —</span></h2>
+            <div class="btn-row">
+              <button class="btn btn-ghost" id="btnFillDemo">填入示範</button>
+              <button class="btn btn-ghost" id="btnClearPlayers">清空</button>
+              <button class="btn btn-primary" id="btnStartTournament" disabled>開始比賽 · 產生第 1 輪</button>
+            </div>
+          </div>
+
+          <div class="deck-summary-bar" id="deckSummaryBar"></div>
+
+          <div class="player-filter-bar" id="playerFilterBar">
+            <div class="player-filter-group">
+              <span class="player-filter-label">教會</span>
+              <div class="player-filter-chips" role="group" aria-label="教會篩選">
+                <button type="button" class="player-filter-chip active" data-filter-church="all">全部</button>
+                <button type="button" class="player-filter-chip kcc" data-filter-church="kcc">城基</button>
+                <button type="button" class="player-filter-chip ky" data-filter-church="ky">基蔭</button>
+              </div>
+            </div>
+            <div class="player-filter-group">
+              <span class="player-filter-label">陀螺登記</span>
+              <div class="player-filter-chips" role="group" aria-label="登記狀態篩選">
+                <button type="button" class="player-filter-chip active" data-filter-deck="all">全部</button>
+                <button type="button" class="player-filter-chip ok" data-filter-deck="done">完成登記</button>
+                <button type="button" class="player-filter-chip warn" data-filter-deck="pending">未完成登記</button>
+              </div>
+            </div>
+            <span class="meta" id="playerFilterCount"></span>
+          </div>
+
+          <div class="add-player-panel">
+            <h3 class="section-label" id="addPlayerHeading">預先登記姓名</h3>
+            <div class="add-player-form">
+              <input type="text" id="newName" class="input" placeholder="姓名" maxlength="20" />
+              <div class="church-checks" id="newChurchChecks" role="radiogroup" aria-label="所屬教會">
+                <label class="church-check kcc">
+                  <input type="radio" name="newChurch" value="kcc" checked />
+                  <span>九龍城基督徒會</span>
+                </label>
+                <label class="church-check ky">
+                  <input type="radio" name="newChurch" value="ky" />
+                  <span>宣道會基蔭堂</span>
+                </label>
+              </div>
+              <button class="btn btn-secondary" id="btnAddPlayer" type="button">預先登記</button>
+            </div>
+            <div class="church-summary mt-12" id="churchSummary"></div>
+            <div class="hint mt-12" style="margin-bottom:0">
+              點選一個教會（二選一），輸入姓名後按「預先登記」。比賽開始後仍可「加入遲到選手」。
+              「遲到」係畀<strong>已知會遲到、尚未到場</strong>嘅選手：單數優先坐場（0–4 負，唔係自動勝）；雙數若對上準時選手亦自動 0–4（遲到期間打唔到真賽係正常）。
+              <strong>到達後請取消勾選</strong>，之後輪次當準時、唔再自動 0–4。本輪已記嘅坐場 0–4 會保留。
+              上蓋：<strong>BX49</strong> / <strong>UX15</strong> / <strong>CX07</strong> / <strong>CX15</strong>（Enter 確認）。
+              CX 可選紋章＋主刃＋輔助（Expand 另需超越戰刃）。固鎖完整列表；軸心代碼（H、LR、J…）。
+            </div>
+          </div>
+
+          <div id="playerCards" class="player-cards mt-16"></div>
+        </div>
+      </section>
+
+      <!-- ===== PAIRINGS ===== -->
+      <section id="tab-pairings" class="tab">
+        <div class="pair-sticky-bar" id="pairStickyBar">
+          <div class="pair-sticky-left">
+            <strong id="pairRoundBadge">本輪對戰表</strong>
+            <span class="meta" id="roundProgress"></span>
+          </div>
+          <div class="pair-sticky-right">
+            <button type="button" class="btn btn-secondary pair-mode-btn" id="btnViewProject" data-pair-view="project">📺 投影（全員）</button>
+            <button type="button" class="btn btn-ghost pair-mode-btn" id="btnViewStaff" data-pair-view="staff">⌨️ 計分操作</button>
+            <button type="button" class="btn btn-ghost btn-sm staff-tools" id="btnRegenPairing">重新配對</button>
+            <button type="button" class="btn btn-ghost btn-sm staff-tools" id="btnManualPair">手動調整</button>
+            <button type="button" class="btn btn-primary btn-sm" id="btnLockRound" disabled>鎖定本輪</button>
+          </div>
+        </div>
+        <div class="panel pairings-panel">
+          <div class="hint staff-only" id="pairingHint">
+            計分模式：可輸入結果。投影模式會同一畫面列出全部選手的對手同報到區。
+          </div>
+          <div class="deck-summary-bar staff-only" id="zoneSummaryBar"></div>
+          <div id="matchGrid" class="match-grid-wrap"></div>
+        </div>
+      </section>
+
+      <!-- ===== STANDINGS ===== -->
+      <section id="tab-standings" class="tab">
+        <div class="pair-sticky-bar" id="standingsStickyBar">
+          <div class="pair-sticky-left">
+            <strong>即時排名</strong>
+            <span class="meta" id="standingsMeta"></span>
+          </div>
+          <div class="pair-sticky-right">
+            <button type="button" class="btn btn-secondary standings-mode-btn" id="btnStandingsProject" data-standings-view="project">📺 投影排名</button>
+            <button type="button" class="btn btn-ghost standings-mode-btn" id="btnStandingsDetail" data-standings-view="detail">📋 詳細紀錄</button>
+          </div>
+        </div>
+        <div id="standingsBoard" class="standings-board"></div>
+        <div class="panel standings-detail-panel" id="standingsDetailPanel">
+          <div class="hint">
+            排序：瑞士積分（勝場）→ 二人同分且曾對賽則 Head-to-Head → 否則比賽總分（BP）→ 姓名。
+            多角同分不用 pairwise H2H（避免循環）。晉級名額見大會設定（4／8／16 強）。
+          </div>
+          <div class="standings-wrap">
+            <table class="table standings" id="standingsTable">
+              <thead>
+                <tr>
+                  <th>排名</th>
+                  <th>選手</th>
+                  <th>教會</th>
+                  <th>勝</th>
+                  <th>負</th>
+                  <th>瑞士分</th>
+                  <th>比賽總分</th>
+                  <th>對戰紀錄（比分）</th>
+                  <th>狀態</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== HISTORY ===== -->
+      <section id="tab-history" class="tab">
+        <div class="panel">
+          <div class="panel-header">
+            <h2>詳細戰績</h2>
+            <span class="meta">每場 Match 的 Battle 明細 · 陀螺 vs 陀螺 · Finish · 得分</span>
+          </div>
+          <div class="hint">
+            記錄每場 Battle：例如第 1 場 Over +2、第 2 場被擊敗 0 分、第 3 場 Spin +1…
+            出場陀螺順序只作裁判登記用，此處顯示該場實際使用嘅陀螺對戰。
+          </div>
+          <div id="historyPanel"></div>
+        </div>
+      </section>
+
+      <!-- ===== TIES ===== -->
+      <section id="tab-ties" class="tab">
+        <div class="panel">
+          <div class="panel-header">
+            <h2>同分處理</h2>
+          </div>
+          <div class="hint">
+            當瑞士積分相同：① 剛好 2 人且曾對賽 → Head-to-Head；② 多角同分或無對賽 → 比賽總分 BP；③ 仍相同則需加賽。
+          </div>
+          <div id="tieBreakPanel"></div>
+        </div>
+      </section>
+
+      <!-- ===== KNOCKOUT ===== -->
+      <section id="tab-knockout" class="tab">
+        <div class="panel">
+          <div class="panel-header">
+            <h2 id="knockoutTitle">淘汰賽</h2>
+            <div class="btn-row">
+              <button class="btn btn-primary" id="btnStartKnockout" disabled>產生淘汰賽配對</button>
+              <button class="btn btn-ghost" id="btnRedoKnockout" type="button" style="display:none">重做淘汰賽</button>
+            </div>
+          </div>
+          <div class="hint">
+            種子配對：第1 vs 第N、第2 vs 第N−1…（標準 bracket）。
+            修改已晉級場次會清除下游並重建。可用「重做淘汰賽」清 bracket（保留瑞士制）。規模喺大會設定選 4／8／16 強。
+          </div>
+          <div id="knockoutBracket" class="knockout"></div>
+        </div>
+      </section>
+
+      <!-- ===== DRAW ===== -->
+      <section id="tab-draw" class="tab">
+        <div class="panel">
+          <div class="panel-header">
+            <h2>抽籤 <span class="badge" id="drawPoolCount">0 人可抽</span></h2>
+            <div class="btn-row">
+              <button type="button" class="btn btn-primary" id="btnDrawNext">抽出下一項</button>
+              <button type="button" class="btn btn-ghost" id="btnDrawResetResults">清除結果</button>
+            </div>
+          </div>
+          <p class="hint">預設<strong>全部參賽選手</strong>都在名單內。可剔除選手，或加入場外人士。抽出後該人唔會再入下一項。</p>
+          <div id="drawReveal" class="draw-reveal idle" aria-live="polite">
+            <div class="draw-arena" aria-hidden="true">
+              <img
+                class="draw-bey"
+                src="assets/draw-bey.jpg"
+                alt=""
+                width="720"
+                height="720"
+                decoding="async"
+              />
+            </div>
+            <div class="draw-reveal-text">
+              <div class="draw-reveal-prize" id="drawRevealPrize"></div>
+              <div class="draw-reveal-name" id="drawRevealName">—</div>
+            </div>
+          </div>
+          <div id="drawResults" class="draw-results mt-16"></div>
+        </div>
+
+        <div class="grid-2 mt-16">
+          <div class="panel">
+            <h3 class="section-label">抽籤名單</h3>
+            <div class="draw-subhead">參賽選手（預設全部參加）</div>
+            <div id="drawPlayerList" class="draw-list"></div>
+            <div class="draw-subhead mt-16">場外名單</div>
+            <div class="add-player-form">
+              <input type="text" id="drawExtraName" class="input" placeholder="姓名" maxlength="20" />
+              <div class="church-checks" id="drawExtraChurch" role="radiogroup" aria-label="所屬">
+                <label class="church-check kcc">
+                  <input type="radio" name="drawExtraChurch" value="kcc" />
+                  <span>九龍城基督徒會</span>
+                </label>
+                <label class="church-check ky">
+                  <input type="radio" name="drawExtraChurch" value="ky" />
+                  <span>宣道會基蔭堂</span>
+                </label>
+                <label class="church-check">
+                  <input type="radio" name="drawExtraChurch" value="out" checked />
+                  <span>場外</span>
+                </label>
+              </div>
+              <button class="btn btn-secondary" id="btnDrawAddExtra" type="button">加入名單</button>
+            </div>
+            <div id="drawExtraList" class="draw-list mt-12"></div>
+          </div>
+
+          <div class="panel">
+            <h3 class="section-label">獎品</h3>
+            <div class="form-row">
+              <input type="text" id="drawPrizeName" class="input" placeholder="獎品名稱" maxlength="40" />
+              <button class="btn btn-secondary" id="btnDrawAddPrize" type="button">加入獎品</button>
+            </div>
+            <p class="meta mt-8">按列表由上至下抽出。可刪未抽出嘅項目，或重抽已抽出嘅項目。</p>
+            <div id="drawPrizeList" class="draw-prize-list mt-12"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== EXPORT ===== -->
+      <section id="tab-export" class="tab">
+        <div class="panel">
+          <div class="panel-header">
+            <h2>匯出 / 備份</h2>
+          </div>
+          <div class="hint">
+            資料存於本機瀏覽器。建議每輪鎖定後檢查自動備份；換機請用「完整 JSON 備份」帶走檔案。
+            出場次序只應裁判知道：公開分享可用「安全匯出（隱藏次序）」。
+          </div>
+          <div class="btn-row wrap">
+            <button class="btn btn-secondary" id="btnExportStandings">匯出排名 CSV</button>
+            <button class="btn btn-secondary" id="btnExportMatches">匯出對戰紀錄 CSV</button>
+            <button class="btn btn-secondary" id="btnExportText">匯出文字報告</button>
+            <button class="btn btn-primary" id="btnExportJson">完整 JSON 備份</button>
+            <button class="btn btn-ghost" id="btnExportJsonSafe">安全匯出（隱藏次序）</button>
+            <button class="btn btn-ghost" id="btnImportJson">還原 JSON 檔</button>
+            <button class="btn btn-secondary" id="btnManualBackup">立即本機備份</button>
+            <button class="btn btn-danger" id="btnResetAll">重置全部資料</button>
+          </div>
+          <input type="file" id="jsonFileInput" accept=".json,application/json" class="hidden" />
+          <h3 class="section-label mt-16">本機自動備份（最多 8 份）</h3>
+          <div id="backupList" class="backup-list"></div>
+          <pre id="exportPreview" class="export-preview mt-16"></pre>
+        </div>
+      </section>
+    </main>
+
+    <!-- 全域 Modal（必須在 tab 外，否則淘汰賽等分頁無法顯示） -->
+    <div id="deckModal" class="modal hidden">
+      <div class="modal-card modal-deck">
+        <div class="modal-header">
+          <h3 id="deckModalTitle">登記陀螺</h3>
+          <button class="btn-icon" id="btnCloseDeck" type="button">✕</button>
+        </div>
+        <div class="modal-body" id="deckModalBody"></div>
+      </div>
+    </div>
+
+    <div id="scoreModal" class="modal hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 id="scoreModalTitle">輸入比賽結果</h3>
+          <button class="btn-icon" id="btnCloseScore" type="button">✕</button>
+        </div>
+        <div class="modal-body" id="scoreModalBody"></div>
+      </div>
+    </div>
+
+    <div id="manualModal" class="modal hidden">
+      <div class="modal-card modal-wide">
+        <div class="modal-header">
+          <h3>手動調整配對</h3>
+          <button class="btn-icon" id="btnCloseManual" type="button">✕</button>
+        </div>
+        <div class="modal-body" id="manualModalBody"></div>
+      </div>
+    </div>
+
+    <div id="beyOrderModal" class="modal hidden">
+      <div class="modal-card modal-wide">
+        <div class="modal-header">
+          <h3 id="beyOrderModalTitle">登記出場次序</h3>
+          <button class="btn-icon" id="btnCloseBeyOrder" type="button">✕</button>
+        </div>
+        <div class="modal-body" id="beyOrderModalBody"></div>
+      </div>
+    </div>
+
+    <div id="tieWinnerModal" class="modal hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 id="tieWinnerModalTitle">指定勝方</h3>
+          <button class="btn-icon" id="btnCloseTieWinner" type="button">✕</button>
+        </div>
+        <div class="modal-body" id="tieWinnerModalBody"></div>
+      </div>
+    </div>
+
+    <!-- 雲端：建立比賽 -->
+    <div id="cloudCreateModal" class="modal hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>建立雲端比賽</h3>
+          <button class="btn-icon" id="btnCloseCloudCreate" type="button">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="hint">會將而家本機資料上傳，並產生比賽 ID。請設定主持碼（至少 4 位）畀可以改分嘅工作人員。</p>
+          <label class="settings-field">
+            <span class="section-label">主持碼</span>
+            <input type="password" id="cloudCreatePass" class="input" autocomplete="new-password" placeholder="至少 4 位" />
+          </label>
+          <label class="settings-field mt-16">
+            <span class="section-label">再輸入一次主持碼</span>
+            <input type="password" id="cloudCreatePass2" class="input" autocomplete="new-password" />
+          </label>
+          <div class="btn-row wrap mt-16">
+            <button type="button" class="btn btn-primary" id="btnCloudCreateConfirm">建立</button>
+          </div>
+          <div id="cloudCreateResult" class="sync-id-card hidden mt-16"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 雲端：加入比賽 -->
+    <div id="cloudJoinModal" class="modal hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>加入比賽</h3>
+          <button class="btn-icon" id="btnCloseCloudJoin" type="button">✕</button>
+        </div>
+        <div class="modal-body">
+          <label class="settings-field">
+            <span class="section-label">比賽 ID</span>
+            <input type="text" id="cloudJoinId" class="input" autocomplete="off" placeholder="例如 A3K9P2" style="text-transform:uppercase;letter-spacing:0.12em;font-weight:800" />
+          </label>
+          <label class="settings-field mt-16">
+            <span class="section-label">主持碼（可留空＝只讀）</span>
+            <input type="password" id="cloudJoinPass" class="input" autocomplete="current-password" placeholder="只睇賽況可留空" />
+          </label>
+          <div class="btn-row wrap mt-16">
+            <button type="button" class="btn btn-primary" id="btnCloudJoinConfirm">加入</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 雲端：大字比賽 ID -->
+    <div id="cloudIdModal" class="modal hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>比賽 ID</h3>
+          <button class="btn-icon" id="btnCloseCloudId" type="button">✕</button>
+        </div>
+        <div class="modal-body" style="text-align:center">
+          <div id="cloudIdBig" class="sync-id-big">————</div>
+          <p class="hint mt-16">其他裝置開啟本網站 → 加入比賽 → 輸入呢個 ID</p>
+          <div class="btn-row wrap" style="justify-content:center">
+            <button type="button" class="btn btn-primary" id="btnCloudCopyId">複製 ID</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <span id="footerStorageHint">資料自動儲存於本機瀏覽器（localStorage）</span>
+      <span id="saveTime"></span>
+      <span id="revPill" class="meta"></span>
+    </footer>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <!-- Firebase（未設定 config 時 sync 會安全停用） -->
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js?v=20260819e"></script>
+  <script src="sync.js?v=20260824a"></script>
+  <!-- cache-bust：確保 GitHub Pages 載入最新 JS -->
+  <script src="parts.js?v=20260824a"></script>
+  <script src="cutoff.js?v=20260824a"></script>
+  <script src="app.js?v=20260824a"></script>
+</body>
+</html>
