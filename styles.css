@@ -3665,8 +3665,83 @@ body.is-score-pad #app {
   grid-template-columns: 1fr auto 1fr;
   gap: 8px;
   align-items: stretch;
-  min-height: 28vh;
+  min-height: 22vh;
 }
+.sp-bey-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 8px;
+  align-items: start;
+  margin-top: 10px;
+}
+.sp-bey-mid {
+  align-self: center;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--muted);
+  writing-mode: vertical-rl;
+}
+.sp-beys {
+  display: grid;
+  gap: 6px;
+}
+.sp-bey {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 6px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #141414;
+  cursor: pointer;
+}
+.sp-bey input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.sp-bey-box {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border-radius: 6px;
+  border: 2px solid #888;
+  background: #0a0a0a;
+  position: relative;
+}
+.sp-bey.on {
+  border-color: var(--accent);
+  background: rgba(200, 255, 0, 0.1);
+}
+.sp-bey.on .sp-bey-box {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.sp-bey.on .sp-bey-box::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 1px;
+  width: 7px;
+  height: 12px;
+  border: solid #111;
+  border-width: 0 3px 3px 0;
+  transform: rotate(45deg);
+}
+.sp-bey-n {
+  font-weight: 900;
+  color: var(--accent);
+  font-size: 0.95rem;
+}
+.sp-bey-lab {
+  font-weight: 800;
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sp-bey.empty .sp-bey-lab { color: var(--muted); font-weight: 700; }
 .sp-player {
   border-radius: 18px;
   border: 2px solid var(--border);

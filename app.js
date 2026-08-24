@@ -4182,6 +4182,8 @@ const DEVICE_ROLE_KEY = "baoluo-cup-next-device-role";
 const PAD_ZONE_KEY = "baoluo-cup-next-pad-zone";
 let padOpenKey = null;
 let padPickSide = null; // "p1" | "p2" | "draw"
+let padBeyP1 = 0;
+let padBeyP2 = 0;
 let padBusy = false;
 
 function getDeviceRole() {
@@ -4345,6 +4347,34 @@ function padVibrate() {
   } catch (_) {}
 }
 
+function initPadBeys(entry) {
+  const m = entry?.match;
+  const n = m?.battles?.length || 0;
+  padBeyP1 = defaultBeyIndexForBattle(m?.p1BeyOrder, n);
+  padBeyP2 = defaultBeyIndexForBattle(m?.p2BeyOrder, n);
+  if (padBeyP1 == null) padBeyP1 = 0;
+  if (padBeyP2 == null) padBeyP2 = 0;
+}
+
+function padBeyChecksHtml(player, side, selected, disabled) {
+  if (player) normalizePlayer(player);
+  return `<div class="sp-beys">
+    ${[0, 1, 2]
+      .map((i) => {
+        const lab = beyShortAt(player, i);
+        const empty = !lab || lab === "—" || lab === "（未登記）";
+        const on = selected === i;
+        return `<label class="sp-bey ${on ? "on" : ""} ${empty ? "empty" : ""}">
+          <input type="checkbox" data-sp="bey" data-side="${side}" data-i="${i}" ${on ? "checked" : ""} ${disabled ? "disabled" : ""} />
+          <span class="sp-bey-box" aria-hidden="true"></span>
+          <span class="sp-bey-n">${i + 1}</span>
+          <span class="sp-bey-lab">${escapeHtml(empty ? "未登記" : lab)}</span>
+        </label>`;
+      })
+      .join("")}
+  </div>`;
+}
+
 function padCanWrite(entry) {
   if (window.BaoluoSync?.isReadOnly?.()) return false;
   if (!entry) return false;
@@ -4367,12 +4397,15 @@ function padRecordBattle(entry, winnerId, finishType) {
     toast("呢場已完場", "error");
     return false;
   }
-  const nextI = m.battles.length;
+  if (padBeyP1 == null || padBeyP2 == null) {
+    toast("請兩邊都勾選用緊邊隻陀螺", "error");
+    return false;
+  }
   const ft = finishType === "draw" || !winnerId ? "draw" : finishType;
   m.battles.push({
     id: uid("b"),
-    p1BeyIndex: defaultBeyIndexForBattle(m.p1BeyOrder, nextI),
-    p2BeyIndex: defaultBeyIndexForBattle(m.p2BeyOrder, nextI),
+    p1BeyIndex: padBeyP1,
+    p2BeyIndex: padBeyP2,
     winnerId: ft === "draw" ? null : winnerId,
     finishType: ft,
     points: finishPts(ft),
@@ -4396,6 +4429,7 @@ function padRecordBattle(entry, winnerId, finishType) {
   }
   saveState();
   padPickSide = null;
+  initPadBeys(entry);
   padVibrate();
   render();
   return true;
@@ -4416,8 +4450,12 @@ function padUndoBattle(entry) {
     toast("未有 Battle 可還原", "error");
     return;
   }
-  m.battles.pop();
+  const last = m.battles.pop();
   applyBattleTotals(m);
+  if (last) {
+    padBeyP1 = last.p1BeyIndex == null ? padBeyP1 : last.p1BeyIndex;
+    padBeyP2 = last.p2BeyIndex == null ? padBeyP2 : last.p2BeyIndex;
+  }
   saveState();
   padVibrate();
   render();
@@ -4522,7 +4560,7 @@ function renderScorePadMatch(top, body, entry, meta) {
   `;
   const last = (m.battles || [])[(m.battles || []).length - 1];
   const lastTxt = last
-    ? `上一盤：${last.finishType === "draw" ? "平手 0" : `${playerById(last.winnerId)?.name || "?"} +${last.points || finishPts(last.finishType)}`}`
+    ? `上一盤：${last.finishType === "draw" ? "平手 0" : `${playerById(last.winnerId)?.name || "?"} +${last.points || finishPts(last.finishType)}`}（${beyShortAt(p1, last.p1BeyIndex)} vs ${beyShortAt(p2, last.p2BeyIndex)}）`
     : "未有 Battle";
   body.innerHTML = `
     <div class="sp-scoreboard">
@@ -4536,14 +4574,21 @@ function renderScorePadMatch(top, body, entry, meta) {
         <span class="sp-ppts">${t.p2Bp}</span>
       </button>
     </div>
+    <div class="sp-bey-row">
+      ${padBeyChecksHtml(p1, "p1", padBeyP1, !can || t.done)}
+      <div class="sp-bey-mid">用緊</div>
+      ${padBeyChecksHtml(p2, "p2", padBeyP2, !can || t.done)}
+    </div>
     <div class="sp-hint">${
       t.done
         ? t.draw
           ? "完場 · 無分"
           : `完場 · ${escapeHtml(playerById(t.winnerId)?.name || "")} 勝`
-        : padPickSide
-          ? "再撳完場方式"
-          : "撳邊個贏咗呢一盤，再撳 Extreme／Over／Burst／Spin"
+        : padBeyP1 == null || padBeyP2 == null
+          ? "兩邊都勾選用緊邊隻陀螺"
+          : padPickSide
+            ? "再撳完場方式"
+            : "撳邊個贏咗呢一盤，再撳 Extreme／Over／Burst／Spin"
     }</div>
     ${
       t.done
@@ -4587,6 +4632,7 @@ function onScorePadClick(e) {
   if (act === "open") {
     padOpenKey = btn.dataset.key;
     padPickSide = null;
+    initPadBeys(findPadEntry(padOpenKey));
     renderScorePad();
     return;
   }
@@ -4597,6 +4643,14 @@ function onScorePadClick(e) {
     return;
   }
   const entry = padOpenKey ? findPadEntry(padOpenKey) : null;
+  if (act === "bey") {
+    e.preventDefault();
+    const i = Number(btn.dataset.i);
+    if (btn.dataset.side === "p2") padBeyP2 = padBeyP2 === i ? null : i;
+    else padBeyP1 = padBeyP1 === i ? null : i;
+    renderScorePad();
+    return;
+  }
   if (act === "pick") {
     padPickSide = btn.dataset.side === "p2" ? "p2" : "p1";
     renderScorePad();
@@ -4608,6 +4662,10 @@ function onScorePadClick(e) {
   }
   if (act === "fin") {
     if (!entry) return;
+    if (padBeyP1 == null || padBeyP2 == null) {
+      toast("請兩邊都勾選用緊邊隻陀螺", "error");
+      return;
+    }
     const ft = btn.dataset.ft;
     let winnerId = null;
     if (ft !== "draw") {
