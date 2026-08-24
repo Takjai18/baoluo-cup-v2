@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@500;700;900&family=Oswald:wght@600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260825k" />
+  <link rel="stylesheet" href="styles.css?v=20260825m" />
 </head>
 <body>
   <!-- 官方風格螢光黃綠 Banner：教會 | 寶螺盃 | BX Logo -->
@@ -854,6 +854,17 @@
     <div class="sp-top" id="scorePadTop"></div>
     <div class="sp-body" id="scorePadBody"></div>
     <input id="padVideoCapture" class="sp-video-input" type="file" accept="video/*" capture="environment" tabindex="-1" aria-hidden="true" />
+    <div id="padRecord" class="sp-record hidden" aria-hidden="true">
+      <video id="padRecordLive" autoplay muted playsinline webkit-playsinline></video>
+      <div class="sp-record-bar">
+        <button type="button" class="sp-clip-drop" data-sp="rec-cancel">取消</button>
+        <button type="button" class="sp-record-go" id="padRecordToggle" data-sp="rec-start">開始錄</button>
+        <span id="padRecordTime" class="sp-record-time">0:00</span>
+      </div>
+    </div>
+    <div id="padRotateHint" class="sp-rotate-hint hidden" aria-hidden="true">
+      <div>請將手機打橫<br>繼續計分</div>
+    </div>
     <div id="padReplay" class="sp-replay hidden" aria-hidden="true">
       <video id="padReplayVid" playsinline webkit-playsinline controls></video>
       <div class="sp-replay-bar">
@@ -900,6 +911,6 @@
   <!-- cache-bust：確保 GitHub Pages 載入最新 JS -->
   <script src="parts.js?v=20260824a"></script>
   <script src="cutoff.js?v=20260824a"></script>
-  <script src="app.js?v=20260825k"></script>
+  <script src="app.js?v=20260825m"></script>
 </body>
 </html>

@@ -3922,6 +3922,68 @@ body.is-score-pad #app {
   color: #111;
   border-color: var(--accent);
 }
+.sp-record {
+  position: absolute;
+  inset: 0;
+  z-index: 97;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+}
+.sp-record.hidden { display: none !important; }
+.sp-record video {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  object-fit: cover;
+  background: #000;
+  transform: translateZ(0);
+}
+.sp-record-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px max(10px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+  background: #111;
+}
+.sp-record-go {
+  min-height: 48px;
+  padding: 8px 22px;
+  border-radius: 999px;
+  border: 0;
+  background: #ff3b3b;
+  color: #fff;
+  font-weight: 900;
+  font-size: 1.05rem;
+}
+.sp-record-go.is-rec {
+  background: var(--accent);
+  color: #111;
+}
+.sp-record-time {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  color: #fff;
+  min-width: 3.5em;
+  text-align: right;
+}
+.sp-rotate-hint {
+  position: absolute;
+  inset: 0;
+  z-index: 94;
+  background: #050505;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 1.45rem;
+  font-weight: 900;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+}
+.sp-rotate-hint.hidden { display: none !important; }
 .sp-clip-copy {
   flex: 1;
   font-size: 0.8rem;

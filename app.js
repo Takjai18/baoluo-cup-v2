@@ -4366,6 +4366,7 @@ function openScorePad() {
   applyDeviceChrome();
   document.body.classList.add("is-score-pad");
   renderScorePad();
+  padRestoreLandscape();
 }
 
 function closeScorePad() {
@@ -4380,6 +4381,8 @@ function closeScorePad() {
     el.classList.add("hidden");
     el.setAttribute("aria-hidden", "true");
   }
+  padCancelInPageRecorder();
+  document.getElementById("padRotateHint")?.classList.add("hidden");
   if (getDeviceRole() === "score") setDeviceRole("desk");
   document.body.classList.remove("is-score-pad");
   applyDeviceChrome();
@@ -4410,10 +4413,203 @@ function padVideoFileName() {
   return raw.replace(/[\\/:*?"<>|]+/g, "") + ".mp4";
 }
 
-function padStartCapture() {
-  if (padPendingClip && !padPendingClip.saved) {
-    if (!confirm("上一段片未儲存到相簿。再拍會取代它。繼續？")) return;
+function padIsPortrait() {
+  try {
+    if (window.matchMedia("(orientation: portrait)").matches) return true;
+  } catch (_) {}
+  return window.innerHeight > window.innerWidth + 40;
+}
+
+function padUpdateRotateHint() {
+  const hint = document.getElementById("padRotateHint");
+  if (!hint) return;
+  const rec = document.getElementById("padRecord");
+  const replay = document.getElementById("padReplay");
+  const recOpen = rec && !rec.classList.contains("hidden");
+  const replayOpen = replay && !replay.classList.contains("hidden");
+  const show = isScorePadOpen() && padIsPortrait() && !recOpen && !replayOpen;
+  hint.classList.toggle("hidden", !show);
+  hint.setAttribute("aria-hidden", show ? "false" : "true");
+}
+
+async function padRestoreLandscape() {
+  try {
+    const pad = document.getElementById("scorePad");
+    if (pad && !document.fullscreenElement && pad.requestFullscreen) {
+      await pad.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
+    }
+  } catch (_) {}
+  try {
+    await screen.orientation?.lock?.("landscape");
+  } catch (_) {}
+  padUpdateRotateHint();
+}
+
+let padMediaStream = null;
+let padRecorder = null;
+let padChunks = [];
+let padRecTimer = null;
+
+function padRecorderMime() {
+  const types = [
+    "video/mp4",
+    "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+    "video/webm;codecs=vp8,opus",
+    "video/webm",
+  ];
+  for (const t of types) {
+    try {
+      if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(t)) return t;
+    } catch (_) {}
   }
+  return "";
+}
+
+function padStopLiveStream() {
+  if (padRecTimer) {
+    clearInterval(padRecTimer);
+    padRecTimer = null;
+  }
+  if (padMediaStream) {
+    padMediaStream.getTracks().forEach((t) => {
+      try {
+        t.stop();
+      } catch (_) {}
+    });
+    padMediaStream = null;
+  }
+  const live = document.getElementById("padRecordLive");
+  if (live) live.srcObject = null;
+  const box = document.getElementById("padRecord");
+  if (box) {
+    box.classList.add("hidden");
+    box.setAttribute("aria-hidden", "true");
+  }
+  padRecorder = null;
+  padChunks = [];
+  const tog = document.getElementById("padRecordToggle");
+  if (tog) {
+    tog.textContent = "開始錄";
+    tog.classList.remove("is-rec");
+    tog.dataset.sp = "rec-start";
+  }
+  const time = document.getElementById("padRecordTime");
+  if (time) time.textContent = "0:00";
+}
+
+function padTickRecTime() {
+  const time = document.getElementById("padRecordTime");
+  const started = Number(time?.dataset.started || 0);
+  if (!time || !started) return;
+  const s = Math.max(0, Math.floor((Date.now() - started) / 1000));
+  time.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+async function padOpenInPageRecorder() {
+  await padRestoreLandscape();
+  const video = {
+    facingMode: { ideal: "environment" },
+    width: { ideal: 1280 },
+    height: { ideal: 720 },
+  };
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true, video });
+  } catch (_) {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: false, video });
+  }
+  padMediaStream = stream;
+  const live = document.getElementById("padRecordLive");
+  const box = document.getElementById("padRecord");
+  if (!live || !box) {
+    padStopLiveStream();
+    throw new Error("no record ui");
+  }
+  live.srcObject = stream;
+  live.muted = true;
+  live.playsInline = true;
+  await live.play().catch(() => {});
+  box.classList.remove("hidden");
+  box.setAttribute("aria-hidden", "false");
+  padUpdateRotateHint();
+}
+
+function padBeginRecording() {
+  if (!padMediaStream) return;
+  if (padRecorder && padRecorder.state === "recording") return;
+  const mime = padRecorderMime();
+  padChunks = [];
+  try {
+    padRecorder = mime ? new MediaRecorder(padMediaStream, { mimeType: mime }) : new MediaRecorder(padMediaStream);
+  } catch (e) {
+    toast("呢部手機唔支援網頁錄影，改用系統相機", "error");
+    padStopLiveStream();
+    padStartFileCapture();
+    return;
+  }
+  padRecorder.ondataavailable = (e) => {
+    if (e.data && e.data.size) padChunks.push(e.data);
+  };
+  padRecorder.onstop = () => padFinishInPageRecording();
+  try {
+    padRecorder.start(250);
+  } catch (e) {
+    toast("開始錄影失敗", "error");
+    return;
+  }
+  const tog = document.getElementById("padRecordToggle");
+  if (tog) {
+    tog.textContent = "停止錄影";
+    tog.classList.add("is-rec");
+    tog.dataset.sp = "rec-stop";
+  }
+  const time = document.getElementById("padRecordTime");
+  if (time) time.dataset.started = String(Date.now());
+  if (padRecTimer) clearInterval(padRecTimer);
+  padRecTimer = setInterval(padTickRecTime, 250);
+  padVibrate();
+}
+
+function padFinishInPageRecording() {
+  const mime = (padRecorder && padRecorder.mimeType) || padRecorderMime() || "video/mp4";
+  const chunks = padChunks.slice();
+  padStopLiveStream();
+  const blob = new Blob(chunks, { type: mime.split(";")[0] || "video/mp4" });
+  if (!blob.size) {
+    toast("未錄到內容", "error");
+    padRestoreLandscape();
+    return;
+  }
+  const ext = /mp4/i.test(mime) ? ".mp4" : /webm/i.test(mime) ? ".webm" : ".mp4";
+  const name = padVideoFileName().replace(/\.mp4$/i, ext);
+  const file = new File([blob], name, { type: blob.type || "video/mp4" });
+  padClearPendingClip();
+  padPendingClip = {
+    file,
+    name,
+    url: URL.createObjectURL(file),
+    saved: false,
+  };
+  padRestoreLandscape();
+  toast("拍好。請撳「儲存到相簿」。", "success");
+  renderScorePad();
+}
+
+function padCancelInPageRecorder() {
+  if (padRecorder && padRecorder.state === "recording") {
+    padRecorder.onstop = () => padStopLiveStream();
+    try {
+      padRecorder.stop();
+    } catch (_) {
+      padStopLiveStream();
+    }
+    return;
+  }
+  padStopLiveStream();
+  padUpdateRotateHint();
+}
+
+function padStartFileCapture() {
   const input = document.getElementById("padVideoCapture");
   if (!input) {
     toast("呢部裝置開唔到鏡頭", "error");
@@ -4421,6 +4617,21 @@ function padStartCapture() {
   }
   input.value = "";
   input.click();
+}
+
+function padStartCapture() {
+  if (padPendingClip && !padPendingClip.saved) {
+    if (!confirm("上一段片未儲存到相簿。再拍會取代它。繼續？")) return;
+  }
+  if (navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== "undefined") {
+    padOpenInPageRecorder().catch((e) => {
+      console.warn(e);
+      toast("改用系統相機（拍完請自行打橫）", "error");
+      padStartFileCapture();
+    });
+    return;
+  }
+  padStartFileCapture();
 }
 
 function padClearPendingClip() {
@@ -4558,6 +4769,7 @@ function padOnVideoCaptured(ev) {
     saved: false,
   };
   toast("拍好。請撳「儲存到相簿」，否則 iPhone 搵唔返。", "success");
+  padRestoreLandscape();
   renderScorePad();
 }
 
@@ -4875,8 +5087,9 @@ function renderScorePadMatch(top, body, entry, meta) {
 
 function onScorePadClick(e) {
   const btn = e.target.closest("[data-sp]");
-  if (!btn || padBusy) return;
+  if (!btn) return;
   const act = btn.dataset.sp;
+  if (padBusy && act !== "rec-stop" && act !== "rec-cancel" && act !== "vid-speed") return;
   if (act === "vid-save") {
     padSavePendingClip();
     return;
@@ -4897,6 +5110,22 @@ function onScorePadClick(e) {
     closePadReplay();
     padClearPendingClip();
     renderScorePad();
+    return;
+  }
+  if (act === "rec-start") {
+    padBeginRecording();
+    return;
+  }
+  if (act === "rec-stop") {
+    if (padRecorder && padRecorder.state === "recording") {
+      try {
+        padRecorder.stop();
+      } catch (_) {}
+    }
+    return;
+  }
+  if (act === "rec-cancel") {
+    padCancelInPageRecorder();
     return;
   }
   if (act === "rec") {
@@ -7760,6 +7989,13 @@ function init() {
   switchTab(getInitialTab());
 
   bindCloudSyncUi();
+  window.addEventListener("orientationchange", () => {
+    setTimeout(() => {
+      padRestoreLandscape();
+      padUpdateRotateHint();
+    }, 250);
+  });
+  window.addEventListener("resize", () => padUpdateRotateHint());
 
 
   // 新增選手：教會二選一（radio，原生互斥）
