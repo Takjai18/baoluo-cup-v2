@@ -978,6 +978,26 @@ const Sync = globalThis.BaoluoSync;
   assert(out.cutPlayoff && out.cutPlayoff.matches.length === 1, "遠端入圍加賽唔好被空本機蓋走");
   assert(out.draw && out.draw.results.length === 1 && out.draw.extras.length === 1, "抽籤結果／場外名單要合併");
 }
+{
+  const local = {
+    instanceId: "t_new",
+    phase: "setup",
+    players: [],
+    rounds: [],
+    currentRound: 0,
+  };
+  const remote = {
+    instanceId: "t_old",
+    phase: "done",
+    players: [{ id: "p1", name: "舊選手" }],
+    rounds: [{ round: 1, matches: [{ id: "m1", p1: "p1", p2: "p2", done: true }] }],
+    currentRound: 4,
+  };
+  const out = Sync.mergeTournamentStates(local, remote);
+  assert((out.players || []).length === 0, "重置後新場次唔好合併舊選手");
+  assert((out.rounds || []).length === 0, "重置後新場次唔好合併舊輪次");
+  assert(out.instanceId === "t_new", "保留新場 instanceId");
+}
 
 console.log("\n════════════════════════");
 console.log(`結果：${passed} passed, ${failed} failed`);

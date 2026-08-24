@@ -450,9 +450,14 @@ function defaultState() {
     knockout: null, // { bracketSize, rounds:[{name,matches}], third, final }
     cutPlayoff: null, // 入圍加賽 { spots, cutScore, playerIds, matches, chain, highId }
     draw: defaultDraw(),
+    instanceId: null,
     updatedAt: null,
     _rev: 0,
   };
+}
+
+function newTournamentInstanceId() {
+  return uid("t");
 }
 
 function defaultDraw() {
@@ -555,6 +560,7 @@ function loadState() {
     st.players = migratePlayers(st.players);
     st.knockout = migrateKnockout(parsed.knockout || st.knockout);
     st.draw = normalizeDraw(parsed.draw || st.draw);
+    st.instanceId = parsed.instanceId || null;
     st._rev = parseInt(parsed._rev, 10) || 0;
     // 補上舊場次 zone（若無）
     const stations = Math.max(1, Math.min(st.settings.referees, st.settings.stadiums));
@@ -643,7 +649,24 @@ function hydrateTournamentState(parsed) {
   st.players = migratePlayers(st.players);
   st.knockout = migrateKnockout(st.knockout);
   st.draw = normalizeDraw(st.draw);
+  st.instanceId = parsed.instanceId || st.instanceId || null;
   return st;
+}
+
+function isFreshTournamentState(st) {
+  const s = st || state;
+  return (
+    (!s.players || s.players.length === 0) &&
+    (!s.rounds || s.rounds.length === 0) &&
+    !s.knockout &&
+    (s.phase === "setup" || !s.phase)
+  );
+}
+
+function abandonCloudRoom() {
+  const sync = window.BaoluoSync;
+  if (!sync?.getRoomId?.()) return;
+  sync.leaveRoom();
 }
 
 function applyRemoteTournamentState(payload, opts = {}) {
@@ -661,6 +684,14 @@ function applyRemoteTournamentState(payload, opts = {}) {
   if (!apply) return;
 
   const parsed = payload.state;
+  if (
+    !opts.force &&
+    state.instanceId &&
+    parsed.instanceId &&
+    state.instanceId !== parsed.instanceId
+  ) {
+    return;
+  }
   const pendingLocal =
     role === "host" &&
     !opts.force &&
@@ -2303,6 +2334,7 @@ function fillDemo() {
 }
 
 function startTournament() {
+  if (!state.instanceId) state.instanceId = newTournamentInstanceId();
   const n = state.players.length;
   if (n < 2) {
     toast("至少要 2 位選手先可以開始", "error");
@@ -3938,12 +3970,18 @@ function saveKoResult(matchRef, winnerId, p1Bp, p2Bp) {
 }
 
 function resetAll() {
-  if (!confirm("確定清除全部資料？此操作無法復原。")) return;
+  const inCloud = !!window.BaoluoSync?.getRoomId?.();
+  const msg = inCloud
+    ? "確定清除全部資料？\n會離開而家呢場雲端比賽（舊 ID 唔會帶去新場）。手機／iPad 要用新比賽 ID 重新加入。\n此操作無法復原。"
+    : "確定清除全部資料？此操作無法復原。";
+  if (!confirm(msg)) return;
+  abandonCloudRoom();
   state = defaultState();
+  state.instanceId = newTournamentInstanceId();
   saveState();
   render();
   switchTab("players");
-  toast("已重置", "success");
+  toast(inCloud ? "已重置並離開舊雲端比賽。請重新建立雲端比賽。" : "已重置", "success");
 }
 
 // ─── Export ──────────────────────────────────────────────
@@ -7294,13 +7332,19 @@ async function handleCloudCreate() {
     toast("兩次主持碼唔一致", "error");
     return;
   }
+  if (
+    !isFreshTournamentState(state) &&
+    !confirm("而家本機仲有比賽資料。建立新雲端會把呢份資料帶去新場。\n若要開全新一場，請先撳「重置全部資料」。繼續？")
+  ) {
+    return;
+  }
   try {
     if (sync.getRoomId?.()) {
       if (!confirm("而家已連住另一場雲端比賽。建立新場會先離開舊場，繼續？")) return;
-      await sync.flush?.(state);
+      if (!isFreshTournamentState(state)) await sync.flush?.(state);
       sync.leaveRoom();
     }
-    // 先確保有最新 rev 寫入本機
+    if (!state.instanceId) state.instanceId = newTournamentInstanceId();
     saveState();
     setDeviceRole("desk");
     const { roomId } = await sync.createRoom(p1, state);
@@ -7347,7 +7391,7 @@ async function handleCloudJoin() {
   if (joinRole === "view") pass = "";
   try {
     if (sync.getRoomId?.()) {
-      await sync.flush?.(state);
+      if (!isFreshTournamentState(state)) await sync.flush?.(state);
       sync.leaveRoom();
     }
     const joined = await sync.joinRoom(roomId, pass);

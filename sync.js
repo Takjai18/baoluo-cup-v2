@@ -148,6 +148,7 @@
     if (!db) return;
     unsub = roomRef(roomId).onSnapshot(
       (snap) => {
+        if (!session || session.roomId !== roomId) return;
         connected = true;
         emitStatus();
         if (!snap.exists) return;
@@ -157,7 +158,7 @@
         if (!remoteState || typeof remoteState !== "object") return;
         if (applyingRemote) return;
         // 自己啱啱推上去
-        if (session?.role === "host" && rev <= lastPushedRev) return;
+        if (session.role === "host" && rev <= lastPushedRev) return;
         remoteListeners.forEach((fn) => {
           try {
             fn({
@@ -532,6 +533,10 @@
   function mergeTournamentStates(localState, remoteState) {
     const local = localState || {};
     const remote = remoteState || {};
+    // 唔同場次（重置／新房）唔好同舊比賽混合
+    if (local.instanceId && remote.instanceId && local.instanceId !== remote.instanceId) {
+      return cloneForFirestore(local);
+    }
     const out = cloneForFirestore(local);
     out.players = mergePlayers(local.players, remote.players);
     out.rounds = mergeRounds(local.rounds, remote.rounds);
