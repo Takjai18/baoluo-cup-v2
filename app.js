@@ -4366,7 +4366,7 @@ function openScorePad() {
   applyDeviceChrome();
   document.body.classList.add("is-score-pad");
   renderScorePad();
-  padRestoreLandscape();
+  padFollowDeviceOrientation();
 }
 
 function closeScorePad() {
@@ -4382,7 +4382,6 @@ function closeScorePad() {
     el.setAttribute("aria-hidden", "true");
   }
   padCancelInPageRecorder();
-  document.getElementById("padRotateHint")?.classList.add("hidden");
   if (getDeviceRole() === "score") setDeviceRole("desk");
   document.body.classList.remove("is-score-pad");
   applyDeviceChrome();
@@ -4413,36 +4412,13 @@ function padVideoFileName() {
   return raw.replace(/[\\/:*?"<>|]+/g, "") + ".mp4";
 }
 
-function padIsPortrait() {
+function padFollowDeviceOrientation() {
   try {
-    if (window.matchMedia("(orientation: portrait)").matches) return true;
-  } catch (_) {}
-  return window.innerHeight > window.innerWidth + 40;
-}
-
-function padUpdateRotateHint() {
-  const hint = document.getElementById("padRotateHint");
-  if (!hint) return;
-  const rec = document.getElementById("padRecord");
-  const replay = document.getElementById("padReplay");
-  const recOpen = rec && !rec.classList.contains("hidden");
-  const replayOpen = replay && !replay.classList.contains("hidden");
-  const show = isScorePadOpen() && padIsPortrait() && !recOpen && !replayOpen;
-  hint.classList.toggle("hidden", !show);
-  hint.setAttribute("aria-hidden", show ? "false" : "true");
-}
-
-async function padRestoreLandscape() {
-  try {
-    const pad = document.getElementById("scorePad");
-    if (pad && !document.fullscreenElement && pad.requestFullscreen) {
-      await pad.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
-    }
+    screen.orientation?.unlock?.();
   } catch (_) {}
   try {
-    await screen.orientation?.lock?.("landscape");
+    if (document.fullscreenElement) document.exitFullscreen?.();
   } catch (_) {}
-  padUpdateRotateHint();
 }
 
 let padMediaStream = null;
@@ -4506,7 +4482,7 @@ function padTickRecTime() {
 }
 
 async function padOpenInPageRecorder() {
-  await padRestoreLandscape();
+  padFollowDeviceOrientation();
   const video = {
     facingMode: { ideal: "environment" },
     width: { ideal: 1280 },
@@ -4531,7 +4507,6 @@ async function padOpenInPageRecorder() {
   await live.play().catch(() => {});
   box.classList.remove("hidden");
   box.setAttribute("aria-hidden", "false");
-  padUpdateRotateHint();
 }
 
 function padBeginRecording() {
@@ -4577,7 +4552,6 @@ function padFinishInPageRecording() {
   const blob = new Blob(chunks, { type: mime.split(";")[0] || "video/mp4" });
   if (!blob.size) {
     toast("未錄到內容", "error");
-    padRestoreLandscape();
     return;
   }
   const ext = /mp4/i.test(mime) ? ".mp4" : /webm/i.test(mime) ? ".webm" : ".mp4";
@@ -4590,7 +4564,6 @@ function padFinishInPageRecording() {
     url: URL.createObjectURL(file),
     saved: false,
   };
-  padRestoreLandscape();
   toast("拍好。請撳「儲存到相簿」。", "success");
   renderScorePad();
 }
@@ -4606,7 +4579,6 @@ function padCancelInPageRecorder() {
     return;
   }
   padStopLiveStream();
-  padUpdateRotateHint();
 }
 
 function padStartFileCapture() {
@@ -4769,7 +4741,6 @@ function padOnVideoCaptured(ev) {
     saved: false,
   };
   toast("拍好。請撳「儲存到相簿」，否則 iPhone 搵唔返。", "success");
-  padRestoreLandscape();
   renderScorePad();
 }
 
@@ -7989,13 +7960,6 @@ function init() {
   switchTab(getInitialTab());
 
   bindCloudSyncUi();
-  window.addEventListener("orientationchange", () => {
-    setTimeout(() => {
-      padRestoreLandscape();
-      padUpdateRotateHint();
-    }, 250);
-  });
-  window.addEventListener("resize", () => padUpdateRotateHint());
 
 
   // 新增選手：教會二選一（radio，原生互斥）

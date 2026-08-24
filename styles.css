@@ -3968,22 +3968,7 @@ body.is-score-pad #app {
   min-width: 3.5em;
   text-align: right;
 }
-.sp-rotate-hint {
-  position: absolute;
-  inset: 0;
-  z-index: 94;
-  background: #050505;
-  color: var(--accent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  font-size: 1.45rem;
-  font-weight: 900;
-  line-height: 1.4;
-  letter-spacing: 0.04em;
-}
-.sp-rotate-hint.hidden { display: none !important; }
+
 .sp-clip-copy {
   flex: 1;
   font-size: 0.8rem;
