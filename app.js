@@ -4273,8 +4273,8 @@ function padMatchKey(entry) {
 
 function listPadMatches() {
   const out = [];
-  const round = currentRoundObj();
-  if (round) {
+  const rounds = [...(state.rounds || [])].sort((a, b) => (a.round || 0) - (b.round || 0));
+  for (const round of rounds) {
     for (const m of round.matches || []) {
       if (isByeMatch(m)) continue;
       out.push({
@@ -4694,7 +4694,7 @@ function renderScorePad() {
       <button type="button" class="sp-icon" data-sp="desk" title="返大會畫面">大會</button>
     </div>
     ${padClipBannerHtml()}
-    <div class="sp-scoreline">${openN} 場進行中</div>
+    <div class="sp-scoreline">${all.length} 場 · ${openN} 未完</div>
     <div class="sp-zones">
       <button type="button" class="sp-chip ${filter === "all" ? "on" : ""}" data-sp="zone" data-z="all">全部</button>
       <button type="button" class="sp-chip ${filter === "open" ? "on" : ""}" data-sp="zone" data-z="open">未完場</button>
@@ -4709,7 +4709,9 @@ function renderScorePad() {
   `;
 
   if (!list.length) {
-    body.innerHTML = `<div class="sp-empty">而家冇場要入。<br>等主電腦產生對戰表／下一輪。</div>`;
+    body.innerHTML = `<div class="sp-empty">${
+      filter === "open" ? "冇未完場比賽。" : "尚未有對戰表。<br>等主電腦產生配對。"
+    }</div>`;
     return;
   }
 
