@@ -4635,6 +4635,7 @@ function renderScorePad() {
   top.innerHTML = `
     <div class="sp-bar">
       <div class="sp-bar-id">${roomId ? escapeHtml(roomId) : "本機"} · 計分板</div>
+      <button type="button" class="sp-icon" data-sp="join" title="加入雲端比賽">${roomId ? "換房" : "雲端"}</button>
       <button type="button" class="sp-icon sp-rec" data-sp="rec" title="用手機拍片，只存你部機">拍片</button>
       <button type="button" class="sp-icon" data-sp="desk" title="返大會畫面">大會</button>
     </div>
@@ -4700,6 +4701,7 @@ function renderScorePadMatch(top, body, entry, meta) {
     <div class="sp-bar">
       <button type="button" class="sp-icon" data-sp="back">← 場次</button>
       <div class="sp-bar-id">${escapeHtml(entry.zoneCode || "")} · ${escapeHtml(entry.label)}</div>
+      <button type="button" class="sp-icon" data-sp="join" title="加入雲端比賽">${meta.roomId ? "換房" : "雲端"}</button>
       <button type="button" class="sp-icon sp-rec" data-sp="rec" title="用手機拍片，只存你部機">拍片</button>
       <button type="button" class="sp-icon" data-sp="desk">大會</button>
     </div>
@@ -4763,6 +4765,10 @@ function onScorePadClick(e) {
   const act = btn.dataset.sp;
   if (act === "rec") {
     padStartCapture();
+    return;
+  }
+  if (act === "join") {
+    openPadJoinModal();
     return;
   }
   if (act === "desk") {
@@ -7375,54 +7381,98 @@ async function handleCloudCreate() {
   }
 }
 
-async function handleCloudJoin() {
+async function joinCloudRoom(joinRole, roomId, pass) {
   const sync = window.BaoluoSync;
   if (!sync?.isConfigReady?.()) {
     toast("請先設定 firebase-config.js", "error");
-    return;
+    return false;
   }
-  const roomId = document.getElementById("cloudJoinId")?.value || "";
-  const joinRole = document.querySelector('input[name="joinRole"]:checked')?.value || "score";
-  let pass = document.getElementById("cloudJoinPass")?.value || "";
-  if (joinRole !== "view" && !String(pass).trim()) {
+  if (joinRole !== "view" && !String(pass || "").trim()) {
     toast("計分板同大會主電腦都要填主持碼", "error");
-    return;
+    return false;
   }
   if (joinRole === "view") pass = "";
-  try {
-    if (sync.getRoomId?.()) {
-      if (!isFreshTournamentState(state)) await sync.flush?.(state);
+  if (sync.getRoomId?.()) {
+    if (!isFreshTournamentState(state)) await sync.flush?.(state);
+    sync.leaveRoom();
+  }
+  const joined = await sync.joinRoom(roomId, pass);
+  if (joined.state) {
+    if (
+      state.players.length > 0 &&
+      !confirm("加入雲端會用遠端資料覆蓋本機畫面。本機而家有資料，確定繼續？")
+    ) {
       sync.leaveRoom();
+      updateSyncUi();
+      return false;
     }
-    const joined = await sync.joinRoom(roomId, pass);
-    if (joined.state) {
-      if (
-        state.players.length > 0 &&
-        !confirm("加入雲端會用遠端資料覆蓋本機畫面。本機而家有資料，確定繼續？")
-      ) {
-        sync.leaveRoom();
-        updateSyncUi();
-        return;
-      }
-      applyRemoteTournamentState(
-        {
-          rev: joined.rev,
-          state: joined.state,
-          updatedAt: null,
-        },
-        { force: true }
-      );
-    }
+    applyRemoteTournamentState(
+      {
+        rev: joined.rev,
+        state: joined.state,
+        updatedAt: null,
+      },
+      { force: true }
+    );
+  }
+  const role = joined.role === "host" ? joinRole : "view";
+  setDeviceRole(role);
+  updateSyncUi();
+  return { joined, role };
+}
+
+function openPadJoinModal() {
+  const idEl = document.getElementById("padJoinId");
+  const passEl = document.getElementById("padJoinPass");
+  if (idEl) idEl.value = window.BaoluoSync?.getRoomId?.() || "";
+  if (passEl) passEl.value = "";
+  openModal("padJoinModal");
+  setTimeout(() => (idEl?.value ? passEl : idEl)?.focus?.(), 50);
+}
+
+async function handlePadCloudJoin() {
+  const roomId = document.getElementById("padJoinId")?.value || "";
+  const pass = document.getElementById("padJoinPass")?.value || "";
+  if (!String(roomId).trim()) {
+    toast("請輸入比賽 ID", "error");
+    return;
+  }
+  if (!String(pass).trim()) {
+    toast("計分板要填主持碼先可以入分", "error");
+    return;
+  }
+  try {
+    const out = await joinCloudRoom("score", roomId, pass);
+    if (!out) return;
+    closeModal("padJoinModal");
+    setDeviceRole("score");
+    openScorePad();
+    toast(
+      out.role === "score"
+        ? `已連線 ${out.joined.roomId} · 計分板`
+        : `主持碼不正確，而家係只讀。請再試。`,
+      out.role === "score" ? "success" : "error"
+    );
+  } catch (e) {
+    console.error(e);
+    toast(e.message || String(e), "error");
+  }
+}
+
+async function handleCloudJoin() {
+  const roomId = document.getElementById("cloudJoinId")?.value || "";
+  const joinRole = document.querySelector('input[name="joinRole"]:checked')?.value || "score";
+  const pass = document.getElementById("cloudJoinPass")?.value || "";
+  try {
+    const out = await joinCloudRoom(joinRole, roomId, pass);
+    if (!out) return;
     closeModal("cloudJoinModal");
-    const role = joined.role === "host" ? joinRole : "view";
-    setDeviceRole(role);
-    updateSyncUi();
-    if (role === "score") {
+    if (out.role === "score") {
       openScorePad();
-      toast(`已連線 ${joined.roomId} · 計分板`, "success");
+      toast(`已連線 ${out.joined.roomId} · 計分板`, "success");
     } else {
       toast(
-        joined.role === "host" ? `已以大會主電腦加入 ${joined.roomId}` : `已只讀加入 ${joined.roomId}`,
+        out.joined.role === "host" ? `已以大會主電腦加入 ${out.joined.roomId}` : `已只讀加入 ${out.joined.roomId}`,
         "success"
       );
     }
@@ -7473,6 +7523,17 @@ function bindCloudSyncUi() {
   document.getElementById("btnCloseCloudId")?.addEventListener("click", () => closeModal("cloudIdModal"));
   document.getElementById("btnCloudCreateConfirm")?.addEventListener("click", () => handleCloudCreate());
   document.getElementById("btnCloudJoinConfirm")?.addEventListener("click", () => handleCloudJoin());
+  document.getElementById("btnPadJoinConfirm")?.addEventListener("click", () => handlePadCloudJoin());
+  document.getElementById("btnClosePadJoin")?.addEventListener("click", () => closeModal("padJoinModal"));
+  document.getElementById("padJoinModal")?.addEventListener("click", (e) => {
+    if (e.target.id === "padJoinModal") closeModal("padJoinModal");
+  });
+  document.getElementById("padJoinPass")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") handlePadCloudJoin();
+  });
+  document.getElementById("padJoinId")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") document.getElementById("padJoinPass")?.focus();
+  });
   const syncJoinRoles = () => {
     document.querySelectorAll(".join-role").forEach((lab) => {
       lab.classList.toggle("on", !!lab.querySelector("input")?.checked);

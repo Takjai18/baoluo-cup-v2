@@ -856,6 +856,29 @@
     <input id="padVideoCapture" class="sp-video-input" type="file" accept="video/*" capture="environment" tabindex="-1" aria-hidden="true" />
   </div>
 
+  <div id="padJoinModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>加入雲端比賽</h3>
+        <button class="btn-icon" id="btnClosePadJoin" type="button">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="hint" style="margin-top:0">計分板身份已選定。只需比賽 ID 同主持碼。</p>
+        <label class="settings-field">
+          <span class="section-label">比賽 ID</span>
+          <input type="text" id="padJoinId" class="input" autocomplete="off" placeholder="例如 A3K9P2" style="text-transform:uppercase;letter-spacing:0.12em;font-weight:800" />
+        </label>
+        <label class="settings-field mt-16">
+          <span class="section-label">主持碼</span>
+          <input type="password" id="padJoinPass" class="input" autocomplete="current-password" placeholder="入分必須填" />
+        </label>
+        <div class="btn-row wrap mt-16">
+          <button type="button" class="btn btn-primary" id="btnPadJoinConfirm">加入並計分</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast hidden"></div>
   <!-- Firebase（未設定 config 時 sync 會安全停用） -->
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
@@ -865,6 +888,6 @@
   <!-- cache-bust：確保 GitHub Pages 載入最新 JS -->
   <script src="parts.js?v=20260824a"></script>
   <script src="cutoff.js?v=20260824a"></script>
-  <script src="app.js?v=20260825e"></script>
+  <script src="app.js?v=20260825f"></script>
 </body>
 </html>
