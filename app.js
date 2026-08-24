@@ -238,7 +238,7 @@ function defaultSettings() {
     playerCount: 16, // 參賽人數（可單數；單數則輪空）
     playerPreset: "16", // '8' | '16' | '32' | '64' | 'other'
     koSize: 4, // 淘汰賽名額：4 | 8 | 16
-    qualifyRule: "A", // 入圍規則 A 完整決策樹／B 簡易（淨勝分、打贏出線）
+    qualifyRule: "B", // 入圍規則 A 完整決策樹／B 簡易（淨勝分、打贏出線）；預設 B
   };
 }
 
@@ -251,7 +251,7 @@ function normalizeSettings(s) {
   let playerCount = parseInt(src.playerCount, 10);
   let playerPreset = String(src.playerPreset || "");
   let koSize = parseInt(src.koSize, 10);
-  let qualifyRule = String(src.qualifyRule || d.qualifyRule || "A")
+  let qualifyRule = String(src.qualifyRule || d.qualifyRule || "B")
     .trim()
     .toUpperCase();
   if (!QUALIFY_RULES.includes(qualifyRule)) qualifyRule = d.qualifyRule;
@@ -313,7 +313,7 @@ function getKoBracketSize() {
 }
 
 function getQualifyRule() {
-  const r = String(normalizeSettings(state.settings).qualifyRule || "A").toUpperCase();
+  const r = String(normalizeSettings(state.settings).qualifyRule || "B").toUpperCase();
   return QUALIFY_RULES.includes(r) ? r : "A";
 }
 
@@ -1984,7 +1984,7 @@ function saveSettingsFromForm() {
   const swissRounds = parseInt(document.getElementById("setSwissRounds")?.value, 10);
   const playerPreset = document.getElementById("setPlayerPreset")?.value || "16";
   const koSize = parseInt(document.getElementById("setKoSize")?.value, 10);
-  const qualifyRule = document.getElementById("setQualifyRule")?.value || "A";
+  const qualifyRule = document.getElementById("setQualifyRule")?.value || "B";
   let playerCount;
   if (playerPreset === "other") {
     playerCount = parseInt(document.getElementById("setPlayerCountCustom")?.value, 10);
@@ -7726,7 +7726,7 @@ function init() {
     const swissRounds = parseInt(document.getElementById("setSwissRounds")?.value, 10);
     const playerPreset = document.getElementById("setPlayerPreset")?.value || "16";
     const koSize = parseInt(document.getElementById("setKoSize")?.value, 10);
-    const qualifyRule = document.getElementById("setQualifyRule")?.value || "A";
+    const qualifyRule = document.getElementById("setQualifyRule")?.value || "B";
     const playerCount =
       playerPreset === "other"
         ? parseInt(document.getElementById("setPlayerCountCustom")?.value, 10)
