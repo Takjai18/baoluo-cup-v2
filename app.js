@@ -4424,6 +4424,14 @@ function padStartCapture() {
 }
 
 function padClearPendingClip() {
+  closePadReplay();
+  const vid = document.getElementById("padReplayVid");
+  if (vid) {
+    vid.removeAttribute("src");
+    try {
+      vid.load();
+    } catch (_) {}
+  }
   if (padPendingClip?.url) {
     try {
       URL.revokeObjectURL(padPendingClip.url);
@@ -4446,21 +4454,65 @@ function padClipBannerHtml() {
   const saved = !!padPendingClip.saved;
   return `
     <div class="sp-clip ${saved ? "is-saved" : "is-pending"}">
-      <video class="sp-clip-vid" src="${padPendingClip.url}" playsinline webkit-playsinline controls></video>
+      <button type="button" class="sp-clip-play" data-sp="vid-replay" title="重播">▶ 重播</button>
       <div class="sp-clip-copy">${
         saved
-          ? "已交俾手機處理。請到「相簿 → 最近項目」確認。"
-          : "片未入相簿。撳「儲存到相簿」，喺分享表揀「儲存影片」。長按預覽亦可儲存。"
+          ? "可重播慢鏡。相簿請到「最近項目」確認。"
+          : "未入相簿亦可重播／慢鏡。要留低請撳「儲存到相簿」。"
       }</div>
       <div class="sp-clip-btns">
-        ${
-          saved
-            ? `<button type="button" class="sp-clip-save" data-sp="vid-drop">完成</button>`
-            : `<button type="button" class="sp-clip-save" data-sp="vid-save">儲存到相簿</button>
-               <button type="button" class="sp-clip-drop" data-sp="vid-drop">捨棄</button>`
-        }
+        ${saved ? "" : `<button type="button" class="sp-clip-save" data-sp="vid-save">儲存到相簿</button>`}
+        <button type="button" class="sp-clip-drop" data-sp="vid-drop">${saved ? "收起" : "捨棄"}</button>
       </div>
     </div>`;
+}
+
+let padReplayRate = 1;
+
+function padSyncReplaySpeeds() {
+  document.querySelectorAll("#padReplay .sp-speed").forEach((b) => {
+    b.classList.toggle("on", Number(b.dataset.spd) === padReplayRate);
+  });
+}
+
+function openPadReplay() {
+  if (!padPendingClip?.url) {
+    toast("未有片可以重播", "error");
+    return;
+  }
+  const box = document.getElementById("padReplay");
+  const vid = document.getElementById("padReplayVid");
+  if (!box || !vid) return;
+  if (vid.getAttribute("src") !== padPendingClip.url) {
+    vid.src = padPendingClip.url;
+  }
+  vid.playbackRate = padReplayRate;
+  box.classList.remove("hidden");
+  box.setAttribute("aria-hidden", "false");
+  padSyncReplaySpeeds();
+  vid.play?.().catch(() => {});
+}
+
+function closePadReplay() {
+  const box = document.getElementById("padReplay");
+  const vid = document.getElementById("padReplayVid");
+  if (vid) {
+    try {
+      vid.pause();
+    } catch (_) {}
+  }
+  if (box) {
+    box.classList.add("hidden");
+    box.setAttribute("aria-hidden", "true");
+  }
+}
+
+function padSetReplaySpeed(rate) {
+  const n = Number(rate);
+  padReplayRate = n > 0 ? n : 1;
+  const vid = document.getElementById("padReplayVid");
+  if (vid) vid.playbackRate = padReplayRate;
+  padSyncReplaySpeeds();
 }
 
 async function padSavePendingClip() {
@@ -4829,7 +4881,20 @@ function onScorePadClick(e) {
     padSavePendingClip();
     return;
   }
+  if (act === "vid-replay") {
+    openPadReplay();
+    return;
+  }
+  if (act === "vid-replay-close") {
+    closePadReplay();
+    return;
+  }
+  if (act === "vid-speed") {
+    padSetReplaySpeed(btn.dataset.spd);
+    return;
+  }
   if (act === "vid-drop") {
+    closePadReplay();
     padClearPendingClip();
     renderScorePad();
     return;

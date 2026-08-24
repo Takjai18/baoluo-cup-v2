@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@500;700;900&family=Oswald:wght@600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260825i" />
+  <link rel="stylesheet" href="styles.css?v=20260825k" />
 </head>
 <body>
   <!-- 官方風格螢光黃綠 Banner：教會 | 寶螺盃 | BX Logo -->
@@ -854,6 +854,18 @@
     <div class="sp-top" id="scorePadTop"></div>
     <div class="sp-body" id="scorePadBody"></div>
     <input id="padVideoCapture" class="sp-video-input" type="file" accept="video/*" capture="environment" tabindex="-1" aria-hidden="true" />
+    <div id="padReplay" class="sp-replay hidden" aria-hidden="true">
+      <video id="padReplayVid" playsinline webkit-playsinline controls></video>
+      <div class="sp-replay-bar">
+        <span class="sp-replay-lab">速度</span>
+        <button type="button" class="sp-speed" data-sp="vid-speed" data-spd="0.25">0.25×</button>
+        <button type="button" class="sp-speed" data-sp="vid-speed" data-spd="0.5">0.5×</button>
+        <button type="button" class="sp-speed" data-sp="vid-speed" data-spd="0.75">0.75×</button>
+        <button type="button" class="sp-speed on" data-sp="vid-speed" data-spd="1">1×</button>
+        <button type="button" class="sp-clip-save" data-sp="vid-save">儲存到相簿</button>
+        <button type="button" class="sp-clip-drop" data-sp="vid-replay-close">返回計分</button>
+      </div>
+    </div>
   </div>
 
   <div id="padJoinModal" class="modal hidden">
@@ -888,6 +900,6 @@
   <!-- cache-bust：確保 GitHub Pages 載入最新 JS -->
   <script src="parts.js?v=20260824a"></script>
   <script src="cutoff.js?v=20260824a"></script>
-  <script src="app.js?v=20260825j"></script>
+  <script src="app.js?v=20260825k"></script>
 </body>
 </html>
