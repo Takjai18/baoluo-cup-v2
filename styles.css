@@ -3775,8 +3775,12 @@ body.is-score-pad #app {
   align-self: center;
   font-weight: 800;
   color: var(--muted);
-  writing-mode: vertical-rl;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+}
+.sp-bey.used {
+  opacity: 0.4;
+  pointer-events: none;
 }
 .sp-hint {
   text-align: center;

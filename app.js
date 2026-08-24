@@ -4347,28 +4347,52 @@ function padVibrate() {
   } catch (_) {}
 }
 
+/** 頭 3 盤已用過嘅陀螺 index；第 4 盤起唔再限制。 */
+function padUsedBeySet(match, side) {
+  const battles = match?.battles || [];
+  if (battles.length >= 3) return new Set();
+  const key = side === "p2" ? "p2BeyIndex" : "p1BeyIndex";
+  const used = new Set();
+  for (const b of battles) {
+    if (b[key] == null || b[key] === "") continue;
+    const n = Number(b[key]);
+    if (n === 0 || n === 1 || n === 2) used.add(n);
+  }
+  return used;
+}
+
+function padFirstFreeBey(match, side, prefer) {
+  const used = padUsedBeySet(match, side);
+  const pref = prefer === 0 || prefer === 1 || prefer === 2 ? prefer : null;
+  if (pref != null && !used.has(pref)) return pref;
+  for (const i of [0, 1, 2]) if (!used.has(i)) return i;
+  return pref != null ? pref : 0;
+}
+
 function initPadBeys(entry) {
   const m = entry?.match;
   const n = m?.battles?.length || 0;
-  padBeyP1 = defaultBeyIndexForBattle(m?.p1BeyOrder, n);
-  padBeyP2 = defaultBeyIndexForBattle(m?.p2BeyOrder, n);
-  if (padBeyP1 == null) padBeyP1 = 0;
-  if (padBeyP2 == null) padBeyP2 = 0;
+  const d1 = defaultBeyIndexForBattle(m?.p1BeyOrder, n);
+  const d2 = defaultBeyIndexForBattle(m?.p2BeyOrder, n);
+  padBeyP1 = padFirstFreeBey(m, "p1", d1);
+  padBeyP2 = padFirstFreeBey(m, "p2", d2);
 }
 
-function padBeyChecksHtml(player, side, selected, disabled) {
+function padBeyChecksHtml(player, side, selected, disabled, used) {
   if (player) normalizePlayer(player);
+  const usedSet = used || new Set();
   return `<div class="sp-beys">
     ${[0, 1, 2]
       .map((i) => {
         const lab = beyShortAt(player, i);
         const empty = !lab || lab === "—" || lab === "（未登記）";
         const on = selected === i;
-        return `<label class="sp-bey ${on ? "on" : ""} ${empty ? "empty" : ""}">
-          <input type="checkbox" data-sp="bey" data-side="${side}" data-i="${i}" ${on ? "checked" : ""} ${disabled ? "disabled" : ""} />
+        const taken = usedSet.has(i);
+        return `<label class="sp-bey ${on ? "on" : ""} ${empty ? "empty" : ""} ${taken ? "used" : ""}">
+          <input type="checkbox" data-sp="bey" data-side="${side}" data-i="${i}" ${on ? "checked" : ""} ${disabled || taken ? "disabled" : ""} />
           <span class="sp-bey-box" aria-hidden="true"></span>
           <span class="sp-bey-n">${i + 1}</span>
-          <span class="sp-bey-lab">${escapeHtml(empty ? "未登記" : lab)}</span>
+          <span class="sp-bey-lab">${escapeHtml(empty ? "未登記" : taken ? lab + " · 已用" : lab)}</span>
         </label>`;
       })
       .join("")}
@@ -4401,7 +4425,17 @@ function padRecordBattle(entry, winnerId, finishType) {
     toast("請兩邊都勾選用緊邊隻陀螺", "error");
     return false;
   }
-  const ft = finishType === "draw" || !winnerId ? "draw" : finishType;
+  if (finishType === "draw" || !winnerId) {
+    toast("請揀邊個贏同完場方式", "error");
+    return false;
+  }
+  const used1 = padUsedBeySet(m, "p1");
+  const used2 = padUsedBeySet(m, "p2");
+  if (used1.has(padBeyP1) || used2.has(padBeyP2)) {
+    toast("頭 3 盤唔可以重複用同一隻陀螺", "error");
+    return false;
+  }
+  const ft = finishType;
   m.battles.push({
     id: uid("b"),
     p1BeyIndex: padBeyP1,
@@ -4545,6 +4579,8 @@ function renderScorePadMatch(top, body, entry, meta) {
   const p2 = playerById(m.p2);
   const t = totalsFromBattles(m.p1, m.p2, m.battles || []);
   const can = padCanWrite(entry) && !meta.readonly;
+  const used1 = padUsedBeySet(m, "p1");
+  const used2 = padUsedBeySet(m, "p2");
   const finishes = [
     { id: "extreme", lab: "Extreme", pts: 3 },
     { id: "over", lab: "Over", pts: 2 },
@@ -4568,16 +4604,16 @@ function renderScorePadMatch(top, body, entry, meta) {
         <span class="sp-pname">${escapeHtml(p1?.name || "選手1")}</span>
         <span class="sp-ppts">${t.p1Bp}</span>
       </button>
-      <div class="sp-colon">先到 ${MATCH_TARGET}</div>
+      <div class="sp-colon">VS</div>
       <button type="button" class="sp-player ${padPickSide === "p2" ? "pick" : ""} ${t.winnerId === m.p2 ? "win" : ""}" data-sp="pick" data-side="p2" ${!can || t.done ? "disabled" : ""}>
         <span class="sp-pname">${escapeHtml(p2?.name || "選手2")}</span>
         <span class="sp-ppts">${t.p2Bp}</span>
       </button>
     </div>
     <div class="sp-bey-row">
-      ${padBeyChecksHtml(p1, "p1", padBeyP1, !can || t.done)}
+      ${padBeyChecksHtml(p1, "p1", padBeyP1, !can || t.done, used1)}
       <div class="sp-bey-mid">用緊</div>
-      ${padBeyChecksHtml(p2, "p2", padBeyP2, !can || t.done)}
+      ${padBeyChecksHtml(p2, "p2", padBeyP2, !can || t.done, used2)}
     </div>
     <div class="sp-hint">${
       t.done
@@ -4601,7 +4637,6 @@ function renderScorePadMatch(top, body, entry, meta) {
               `<button type="button" class="sp-fin sp-fin-${f.id}" data-sp="fin" data-ft="${f.id}" ${padPickSide ? "" : "disabled"}><b>${f.pts}</b><span>${f.lab}</span></button>`
           )
           .join("")}
-        <button type="button" class="sp-fin sp-fin-draw" data-sp="fin" data-ft="draw"><b>0</b><span>同時完場</span></button>
       </div>`
           : `<div class="sp-warn">${entry.round?.locked ? "本輪已鎖定" : "無法入分"}</div>`
     }
@@ -4646,6 +4681,11 @@ function onScorePadClick(e) {
   if (act === "bey") {
     e.preventDefault();
     const i = Number(btn.dataset.i);
+    const used = padUsedBeySet(entry?.match, btn.dataset.side === "p2" ? "p2" : "p1");
+    if (used.has(i)) {
+      toast("頭 3 盤唔可以重複用同一隻陀螺", "error");
+      return;
+    }
     if (btn.dataset.side === "p2") padBeyP2 = padBeyP2 === i ? null : i;
     else padBeyP1 = padBeyP1 === i ? null : i;
     renderScorePad();
@@ -4667,14 +4707,12 @@ function onScorePadClick(e) {
       return;
     }
     const ft = btn.dataset.ft;
-    let winnerId = null;
-    if (ft !== "draw") {
-      if (!padPickSide) {
-        toast("先撳邊個贏", "error");
-        return;
-      }
-      winnerId = padPickSide === "p1" ? entry.match.p1 : entry.match.p2;
+    if (ft === "draw") return;
+    if (!padPickSide) {
+      toast("先撳邊個贏", "error");
+      return;
     }
+    const winnerId = padPickSide === "p1" ? entry.match.p1 : entry.match.p2;
     padBusy = true;
     try {
       padRecordBattle(entry, winnerId, ft);
