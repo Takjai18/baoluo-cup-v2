@@ -4225,7 +4225,8 @@ let padBusy = false;
 /** 拍片後暫存在記憶體，等裁判撳「儲存到相簿」；唔寫入網站／雲端 */
 let padPendingClip = null;
 /** 計分板 refresh 後要等雲端套用完，先可以反寫，以免本機舊場污染新房 */
-let cloudHydrated = true;
+let cloudHydrated = false;
+const PAD_UI_KEY = "baoluo-cup-next-pad-ui";
 
 function getDeviceRole() {
   try {
@@ -4241,6 +4242,21 @@ function setDeviceRole(role) {
     sessionStorage.setItem(DEVICE_ROLE_KEY, role);
   } catch (_) {}
   applyDeviceChrome();
+}
+
+function getPadUiPreferred() {
+  try {
+    const v = sessionStorage.getItem(PAD_UI_KEY);
+    if (v === "0") return false;
+    if (v === "1") return true;
+  } catch (_) {}
+  return getDeviceRole() === "score";
+}
+
+function setPadUiPreferred(open) {
+  try {
+    sessionStorage.setItem(PAD_UI_KEY, open ? "1" : "0");
+  } catch (_) {}
 }
 
 function isScorePadOpen() {
@@ -4359,10 +4375,11 @@ function openScorePad() {
   el.classList.remove("hidden");
   el.setAttribute("aria-hidden", "false");
   if (getDeviceRole() === "desk") {
-    /* keep desk role so returning to 大會畫面 works */
+    /* 主電腦開計分板仍保持 desk，唔好變成計分板角色 */
   } else {
     setDeviceRole("score");
   }
+  setPadUiPreferred(true);
   applyDeviceChrome();
   document.body.classList.add("is-score-pad");
   renderScorePad();
@@ -4382,7 +4399,9 @@ function closeScorePad() {
     el.setAttribute("aria-hidden", "true");
   }
   padCancelInPageRecorder();
-  if (getDeviceRole() === "score") setDeviceRole("desk");
+  // 計分板角色必須保留。若改成 desk，refresh 會被當成第二部主電腦，
+  // 可能把舊 localStorage 整份推上雲端，污染主電腦畫面。
+  setPadUiPreferred(false);
   document.body.classList.remove("is-score-pad");
   applyDeviceChrome();
   render();
@@ -4796,8 +4815,13 @@ function padBeyChecksHtml(player, side, selected, disabled, used) {
   </div>`;
 }
 
+function padWaitingForCloud() {
+  return !cloudHydrated && !!window.BaoluoSync?.hasStoredSession?.();
+}
+
 function padCanWrite(entry) {
   if (window.BaoluoSync?.isReadOnly?.()) return false;
+  if (padWaitingForCloud()) return false;
   if (!entry) return false;
   if (entry.kind === "swiss" && entry.round?.locked) return false;
   const m = entry.match;
@@ -4940,6 +4964,7 @@ function renderScorePad() {
         )
         .join("")}
     </div>
+    ${padWaitingForCloud() ? `<div class="sp-warn">正在同步雲端，請稍候再入分（避免本機舊資料蓋過主電腦）。</div>` : ""}
     ${readonly ? `<div class="sp-warn">只讀模式：入唔到分。加入時請填主持碼並揀「計分板」。</div>` : ""}
   `;
 
@@ -7683,13 +7708,14 @@ async function handleCloudCreate() {
   try {
     if (sync.getRoomId?.()) {
       if (!confirm("而家已連住另一場雲端比賽。建立新場會先離開舊場，繼續？")) return;
-      if (!isFreshTournamentState(state)) await sync.flush?.(state);
+      if (cloudHydrated && !isFreshTournamentState(state)) await sync.flush?.(state);
       sync.leaveRoom();
     }
     if (!state.instanceId) state.instanceId = newTournamentInstanceId();
     saveState();
     setDeviceRole("desk");
     const { roomId } = await sync.createRoom(p1, state);
+    cloudHydrated = true;
     const result = document.getElementById("cloudCreateResult");
     if (result) {
       result.classList.remove("hidden");
@@ -7729,7 +7755,7 @@ async function joinCloudRoom(joinRole, roomId, pass) {
   }
   if (joinRole === "view") pass = "";
   if (sync.getRoomId?.()) {
-    if (!isFreshTournamentState(state)) await sync.flush?.(state);
+    if (cloudHydrated && !isFreshTournamentState(state)) await sync.flush?.(state);
     sync.leaveRoom();
   }
   const joined = await sync.joinRoom(roomId, pass);
@@ -7821,7 +7847,7 @@ async function handleCloudJoin() {
 
 async function handleCloudLeave() {
   if (!confirm("離開雲端比賽？本機資料會保留，但唔再即時同步。")) return;
-  await window.BaoluoSync?.flush?.(state);
+  if (cloudHydrated) await window.BaoluoSync?.flush?.(state);
   window.BaoluoSync?.leaveRoom?.();
   updateSyncUi();
   toast("已離開雲端", "success");
@@ -7830,8 +7856,6 @@ async function handleCloudLeave() {
 function bindCloudSyncUi() {
   const sync = window.BaoluoSync;
   if (!sync) return;
-  if (getDeviceRole() === "score") cloudHydrated = false;
-
   document.getElementById("btnCloudCreate")?.addEventListener("click", () => {
     if (!sync.isConfigReady()) {
       toast("請先設定 firebase-config.js（見 README）", "error");
@@ -7896,7 +7920,8 @@ function bindCloudSyncUi() {
   // 恢復上次 session
   sync.resumeSession?.().then(async (resumed) => {
     if (!resumed) {
-      cloudHydrated = true;
+      // 換房／建立期間 abort 嘅 resume 唔好當已同步，否則可能把舊本機推去新房
+      if (!sync.getRoomId?.()) cloudHydrated = true;
       updateSyncUi();
       return;
     }
@@ -7904,9 +7929,25 @@ function bindCloudSyncUi() {
     const remoteRev = parseInt(resumed.rev, 10) || 0;
     const remoteId = resumed.state && resumed.state.instanceId;
     const idsDiffer = !!(state.instanceId && remoteId && state.instanceId !== remoteId);
-    const scorePad = getDeviceRole() === "score";
-    // 計分板／舊場本機：refresh 後以雲端為準，唔好把舊 localStorage 推上新房
-    if (resumed.state && (scorePad || idsDiffer || !(resumed.role === "host" && localRev > remoteRev))) {
+    const localMissingInstanceId = !!(remoteId && !state.instanceId);
+    const deviceRole = getDeviceRole();
+    const scorePad = deviceRole === "score";
+    const resumeFlush = sync.shouldResumeFlush
+      ? sync.shouldResumeFlush({
+          deviceRole,
+          idsDiffer,
+          localMissingInstanceId,
+          isHost: resumed.role === "host",
+          localRev,
+          remoteRev,
+        })
+      : !scorePad &&
+        !idsDiffer &&
+        !localMissingInstanceId &&
+        resumed.role === "host" &&
+        localRev > remoteRev;
+    // 計分板／舊場本機：refresh 後以雲端為準，唔好把舊 localStorage 推上雲端
+    if (resumed.state && !resumeFlush) {
       applyRemoteTournamentState(
         {
           rev: resumed.rev,
@@ -7915,12 +7956,12 @@ function bindCloudSyncUi() {
         },
         { force: true }
       );
-    } else if (resumed.role === "host" && localRev > remoteRev) {
-      await sync.flush?.(state);
+    } else if (resumeFlush) {
+      await sync.flush?.(state, { fromResume: true });
     }
     cloudHydrated = true;
     updateSyncUi();
-    if (scorePad) openScorePad();
+    if (scorePad && getPadUiPreferred()) openScorePad();
     toast(
       resumed.role === "host"
         ? scorePad
@@ -8182,7 +8223,7 @@ function init() {
   render();
   try {
     const q = new URLSearchParams(location.search);
-    if (q.get("pad") === "1" || q.get("mode") === "score" || getDeviceRole() === "score") {
+    if (q.get("pad") === "1" || q.get("mode") === "score" || (getDeviceRole() === "score" && getPadUiPreferred())) {
       openScorePad();
     }
   } catch (_) {}

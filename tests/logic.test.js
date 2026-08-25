@@ -1020,6 +1020,77 @@ const Sync = globalThis.BaoluoSync;
   assert(out.instanceId === "t_old", "instance 唔同時 merge 唔好改成本機舊場");
 }
 
+console.log("\n── resume flush 政策（手機 refresh 唔好蓋主電腦）──");
+{
+  const flush = (opts) => Sync.shouldResumeFlush(opts);
+  assert(
+    flush({
+      deviceRole: "score",
+      idsDiffer: false,
+      localMissingInstanceId: false,
+      isHost: true,
+      localRev: 80,
+      remoteRev: 5,
+    }) === false,
+    "計分板即使 localRev 較高都唔好 flush"
+  );
+  assert(
+    flush({
+      deviceRole: "desk",
+      idsDiffer: true,
+      localMissingInstanceId: false,
+      isHost: true,
+      localRev: 80,
+      remoteRev: 5,
+    }) === false,
+    "唔同場次 instanceId 唔好 flush"
+  );
+  assert(
+    flush({
+      deviceRole: "desk",
+      idsDiffer: false,
+      localMissingInstanceId: true,
+      isHost: true,
+      localRev: 80,
+      remoteRev: 5,
+    }) === false,
+    "本機無 instanceId、雲端有：當舊場，唔好 flush"
+  );
+  assert(
+    flush({
+      deviceRole: "view",
+      idsDiffer: false,
+      localMissingInstanceId: false,
+      isHost: false,
+      localRev: 80,
+      remoteRev: 5,
+    }) === false,
+    "只讀角色唔好 flush"
+  );
+  assert(
+    flush({
+      deviceRole: "desk",
+      idsDiffer: false,
+      localMissingInstanceId: false,
+      isHost: true,
+      localRev: 12,
+      remoteRev: 10,
+    }) === true,
+    "大會主電腦離線後有較新本機資料：可以 flush"
+  );
+  assert(
+    flush({
+      deviceRole: "desk",
+      idsDiffer: false,
+      localMissingInstanceId: false,
+      isHost: true,
+      localRev: 8,
+      remoteRev: 10,
+    }) === false,
+    "本機 rev 較低：唔好 flush"
+  );
+}
+
 console.log("\n════════════════════════");
 console.log(`結果：${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

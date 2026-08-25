@@ -23,6 +23,11 @@
   let statusListeners = [];
   let remoteListeners = [];
   let pendingPush = false;
+  let sessionEpoch = 0;
+
+  function bumpSessionEpoch() {
+    sessionEpoch += 1;
+  }
 
   function isConfigReady() {
     const c = global.BAOLUO_FIREBASE_CONFIG;
@@ -212,6 +217,7 @@
     }
     if (!created) throw new Error("無法產生可用比賽 ID，請再試");
 
+    bumpSessionEpoch();
     session = { roomId, role: "host", hostPassHash };
     persistSession();
     startListen(roomId);
@@ -239,6 +245,7 @@
       role = "host";
     }
 
+    bumpSessionEpoch();
     session = {
       roomId,
       role,
@@ -262,8 +269,10 @@
     const s = loadSession();
     if (!s) return null;
     if (!initFirebase()) return null;
+    const epoch = sessionEpoch;
     try {
       const snap = await roomRef(s.roomId).get();
+      if (epoch !== sessionEpoch) return null;
       if (!snap.exists) {
         session = null;
         persistSession();
@@ -296,6 +305,7 @@
   }
 
   function leaveRoom() {
+    bumpSessionEpoch();
     stopListen();
     if (pushTimer) {
       clearTimeout(pushTimer);
@@ -549,11 +559,30 @@
     return out;
   }
 
-  async function pushNow(tournamentState) {
+  /**
+   * refresh／resume 要唔要把本機 localStorage 推上雲端。
+   * 計分板／只讀／唔同場次：永遠唔好 flush（以免手機舊資料蓋主電腦）。
+   */
+  function shouldResumeFlush(opts) {
+    const deviceRole = opts && opts.deviceRole;
+    if (deviceRole === "score" || deviceRole === "view") return false;
+    if (opts && (opts.idsDiffer || opts.localMissingInstanceId)) return false;
+    if (!(opts && opts.isHost)) return false;
+    const localRev = parseInt(opts.localRev, 10) || 0;
+    const remoteRev = parseInt(opts.remoteRev, 10) || 0;
+    return localRev > remoteRev;
+  }
+
+  function hasStoredSession() {
+    return !!loadSession();
+  }
+
+  async function pushNow(tournamentState, opts = {}) {
     if (!session || session.role !== "host" || !db) return null;
     const now = new Date().toISOString();
     applyingRemote = true;
     let result = null;
+    const fromResume = !!opts.fromResume;
     try {
       result = await db.runTransaction(async (tx) => {
         const ref = roomRef(session.roomId);
@@ -575,7 +604,8 @@
             rejected: true,
           };
         }
-        if (remote.state && remoteRev > lastPushedRev) {
+        // resume 時 lastPushedRev 已被設成遠端 rev，若唔 merge 會整份覆蓋主電腦。
+        if (remote.state && (fromResume || remoteRev > lastPushedRev)) {
           next = mergeTournamentStates(next, remote.state);
           nextRev = Math.max(nextRev, remoteRev) + 1;
           next._rev = nextRev;
@@ -637,7 +667,7 @@
   }
 
   /** 離開／關頁前先推走未上載改動 */
-  async function flush(tournamentState) {
+  async function flush(tournamentState, opts = {}) {
     if (pushTimer) {
       clearTimeout(pushTimer);
       pushTimer = null;
@@ -645,7 +675,7 @@
     if (!session || session.role !== "host") return null;
     if (!initFirebase()) return null;
     try {
-      return await pushNow(tournamentState);
+      return await pushNow(tournamentState, opts);
     } catch (e) {
       console.error("[BaoluoSync] flush failed", e);
       return null;
@@ -716,6 +746,8 @@
     generateRoomId,
     sha256Hex,
     shouldApplyRemote,
+    shouldResumeFlush,
+    hasStoredSession,
     SESSION_KEY,
   };
 })(typeof window !== "undefined" ? window : globalThis);
