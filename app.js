@@ -694,7 +694,6 @@ function applyRemoteTournamentState(payload, opts = {}) {
     !opts.force &&
     !payload.merged &&
     !idsDiffer &&
-    getDeviceRole() !== "score" &&
     typeof window.BaoluoSync?.mergeTournamentStates === "function" &&
     (pendingPush || localRev > justPushed);
 
@@ -2231,10 +2230,26 @@ function maybeIncludeLateInCurrentRound(player) {
 function setPlayerLate(id, late) {
   const p = playerById(id);
   if (!p) return;
+  const round = currentRoundObj();
+  if (late && round && !round.locked) {
+    const liveWithBattles = (round.matches || []).filter((m) => {
+      if (isByeMatch(m) || m.done || m.lateForfeit) return false;
+      if (m.p1 !== id && m.p2 !== id) return false;
+      return (m.battles || []).some((b) => b && b.winnerId);
+    });
+    if (
+      liveWithBattles.length &&
+      !confirm(
+        `${p.name} 標遲到會把進行中嘅對賽改為自動 0–4，已入嘅 Battle 會清走。確定？`
+      )
+    ) {
+      render();
+      return;
+    }
+  }
   p.late = !!late;
   p.lateAt = new Date().toISOString();
   let clearedForfeit = false;
-  const round = currentRoundObj();
   if (round && !round.locked) {
     round.matches.forEach((m) => {
       if (isByeMatch(m) && m.p1 === id) {
@@ -4804,8 +4819,8 @@ function padBeyChecksHtml(player, side, selected, disabled, used) {
         const empty = !lab || lab === "—" || lab === "（未登記）";
         const on = selected === i;
         const taken = usedSet.has(i);
-        return `<label class="sp-bey ${on ? "on" : ""} ${empty ? "empty" : ""} ${taken ? "used" : ""}">
-          <input type="checkbox" data-sp="bey" data-side="${side}" data-i="${i}" ${on ? "checked" : ""} ${disabled || taken ? "disabled" : ""} />
+        return `<label class="sp-bey ${on ? "on" : ""} ${empty ? "empty" : ""} ${taken ? "used" : ""}" data-sp="bey" data-side="${side}" data-i="${i}">
+          <input type="checkbox" data-side="${side}" data-i="${i}" ${on ? "checked" : ""} ${disabled || taken ? "disabled" : ""} />
           <span class="sp-bey-box" aria-hidden="true"></span>
           <span class="sp-bey-n">${i + 1}</span>
           <span class="sp-bey-lab">${escapeHtml(empty ? "未登記" : taken ? lab + " · 已用" : lab)}</span>
@@ -4892,6 +4907,10 @@ function padRecordBattle(entry, winnerId, finishType) {
 
 function padUndoBattle(entry) {
   if (!assertCanWrite()) return;
+  if (entry?.match?.lateForfeit) {
+    toast("遲到自動 0–4 唔可以喺計分板還原", "error");
+    return;
+  }
   if (!padCanWrite(entry) && !(entry?.match && !entry.round?.locked)) {
     toast("唔可以還原", "error");
     return;
@@ -4899,6 +4918,14 @@ function padUndoBattle(entry) {
   if (entry.kind === "ko" && entry.match?.done && koMatchHasDownstream(entry.koRef || {})) {
     toast("淘汰賽已晉級，請返主電腦改", "error");
     return;
+  }
+  if (entry.kind === "playoff" && entry.match?.done) {
+    const po = state.cutPlayoff?.matches || [];
+    const idx = po.findIndex((x) => x && x.id === entry.match.id);
+    if (idx >= 0 && po.slice(idx + 1).some((x) => x && x.p1 && x.p2)) {
+      toast("加賽已產生下一場，請返主電腦改", "error");
+      return;
+    }
   }
   const m = entry.match;
   if (!m.battles?.length) {
@@ -7979,7 +8006,9 @@ function bindCloudSyncUi() {
   };
   window.addEventListener("pagehide", flushCloud);
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") flushCloud();
+    // iPhone 切去 WhatsApp／鎖機好常觸發 hidden；計分板唔好把可能過時嘅選手／設定推上主電腦。
+    // 真正 refresh／關頁仍由 pagehide 推走未上載賽果。
+    if (document.visibilityState === "hidden" && getDeviceRole() !== "score") flushCloud();
   });
 
   updateSyncUi();
